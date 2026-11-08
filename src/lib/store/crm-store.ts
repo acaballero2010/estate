@@ -650,6 +650,7 @@ interface CrmState {
   setSelectedLeadId: (id: string | null) => void;
   moveLeadStage: (leadId: string, targetStage: PipelineStage) => void;
   addLead: (input: CreateLeadInput) => Lead;
+  bulkAddLeads: (inputs: CreateLeadInput[]) => Lead[];
   addProperty: (input: CreatePropertyInput) => Property;
   bulkAddProperties: (inputs: CreatePropertyInput[]) => Property[];
   updatePropertyStatus: (propertyId: string, status: Property["status"]) => void;
@@ -753,6 +754,27 @@ export const useCrmStore = create<CrmState>((set, get) => ({
     }));
     void persistAgentDocument(get().activeAgentUid, "leads", newLead);
     return newLead;
+  },
+
+  bulkAddLeads: (inputs) => {
+    const agentUid = get().activeAgentUid || AGENT_ID;
+    const createdList: Lead[] = inputs.map((input) => ({
+      ...input,
+      id: crypto.randomUUID(),
+      assignedAgentId: agentUid,
+      tags: ["CSV Import"],
+      documents: [],
+      lastContactedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    set((state) => ({
+      leads: [...createdList, ...state.leads],
+    }));
+    createdList.forEach((lead) => {
+      void persistAgentDocument(get().activeAgentUid, "leads", lead);
+    });
+    return createdList;
   },
 
   addProperty: (input) => {

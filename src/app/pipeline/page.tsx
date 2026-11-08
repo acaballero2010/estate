@@ -5,19 +5,24 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import Papa from "papaparse";
 import {
   Calculator,
   CheckCircle2,
+  Download,
+  FileSpreadsheet,
   FileText,
   Filter,
   Flame,
   GripVertical,
   Kanban,
   LayoutList,
+  Loader2,
   MapPin,
   MessageSquare,
   MoreHorizontal,
   Search,
+  Upload,
   UserPlus,
   Wallet,
 } from "lucide-react";
@@ -94,7 +99,7 @@ const STAGE_BADGE_VARIANT: Record<PipelineStage, BadgeProps["variant"]> = {
 };
 
 export default function PipelinePage() {
-  const { leads, moveLeadStage, addLead, addLeadNote } = useCrmStore();
+  const { leads, moveLeadStage, addLead, bulkAddLeads, addLeadNote } = useCrmStore();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [priorityFilter, setPriorityFilter] = React.useState<string>("ALL");
   const [activeLead, setActiveLead] = React.useState<Lead | null>(null);
@@ -102,7 +107,10 @@ export default function PipelinePage() {
   const [dragOverStage, setDragOverStage] =
     React.useState<PipelineStage | null>(null);
   const [isNewLeadOpen, setIsNewLeadOpen] = React.useState(false);
+  const [isBulkOpen, setIsBulkOpen] = React.useState(false);
+  const [isParsingCsv, setIsParsingCsv] = React.useState(false);
   const [noteDraft, setNoteDraft] = React.useState("");
+  const csvFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Sync activeLead with store updates
   const selectedLead = React.useMemo(
@@ -208,6 +216,144 @@ export default function PipelinePage() {
     toast.success("Activity note saved to lead timeline");
   };
 
+  // CSV Template Export
+  const handleDownloadLeadCsvTemplate = () => {
+    const templateRows = [
+      {
+        firstName: "Rafael",
+        lastName: "Zobel",
+        email: "rafael.zobel@ayala.com.ph",
+        phone: "+63 917 888 1234",
+        stage: "NEW_LEAD",
+        source: "PORTAL_INQUIRY",
+        priority: "HOT",
+        budgetMin: "15000000",
+        budgetMax: "25000000",
+        preferredLocations: "Bonifacio Global City, Taguig; Makati CBD",
+        preferredPropertyTypes: "CONDOMINIUM",
+        financingPreference: "BANK",
+        notes: "Looking for high-floor corner 2BR/3BR with 2 parking slots.",
+      },
+      {
+        firstName: "Ma. Teresa",
+        lastName: "Del Rosario",
+        email: "teresa.delrosario@gmail.com",
+        phone: "+63 920 555 7890",
+        stage: "CONTACTED",
+        source: "REFERRAL",
+        priority: "HIGH",
+        budgetMin: "9000000",
+        budgetMax: "14000000",
+        preferredLocations: "Nuvali, Santa Rosa, Laguna",
+        preferredPropertyTypes: "HOUSE_AND_LOT",
+        financingPreference: "BANK",
+        notes: "Family looking for 4BR single detached house, moving Q1 2027.",
+      },
+    ];
+
+    const csvContent = Papa.unparse(templateRows);
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "propflow-leads-template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Downloaded CSV lead template");
+  };
+
+  // Export Active Filtered Leads
+  const handleExportFilteredLeads = () => {
+    if (filteredLeads.length === 0) {
+      toast.error("No leads available to export.");
+      return;
+    }
+
+    const exportRows = filteredLeads.map((l) => ({
+      "First Name": l.firstName,
+      "Last Name": l.lastName,
+      Email: l.email,
+      Phone: l.phone,
+      Stage: PIPELINE_STAGE_LABELS[l.stage],
+      Priority: l.priority,
+      Source: l.source.replace(/_/g, " "),
+      "Min Budget (PHP)": l.budgetMin,
+      "Max Budget (PHP)": l.budgetMax,
+      "Preferred Locations": l.preferredLocations.join("; "),
+      "Property Types": l.preferredPropertyTypes.join("; "),
+      Financing: l.financingPreference,
+      Notes: l.notes || "",
+      "Created At": new Date(l.createdAt).toLocaleDateString("en-PH"),
+    }));
+
+    const csvContent = Papa.unparse(exportRows);
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `propflow-leads-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${filteredLeads.length} leads to CSV!`);
+  };
+
+  // Bulk CSV Upload Handler
+  const handleLeadCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsParsingCsv(true);
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        try {
+          const parsedInputs: CreateLeadInput[] = results.data
+            .filter((row) => row.firstName?.trim() || row.lastName?.trim())
+            .map((row) => ({
+              firstName: row.firstName?.trim() || "Prospective",
+              lastName: row.lastName?.trim() || "Buyer",
+              email: row.email?.trim() || "",
+              phone: row.phone?.trim() || "+63 900 000 0000",
+              stage: (row.stage?.trim() || "NEW_LEAD") as PipelineStage,
+              source: (row.source?.trim() || "MANUAL_ENTRY") as CreateLeadInput["source"],
+              priority: (row.priority?.trim() || "MEDIUM") as CreateLeadInput["priority"],
+              budgetMin: parseFloat(row.budgetMin || "3000000") || 3000000,
+              budgetMax: parseFloat(row.budgetMax || "10000000") || 10000000,
+              preferredLocations: row.preferredLocations
+                ? row.preferredLocations.split(";").map((s) => s.trim()).filter(Boolean)
+                : ["Metro Manila"],
+              preferredPropertyTypes: row.preferredPropertyTypes
+                ? (row.preferredPropertyTypes.split(";").map((s) => s.trim()) as CreateLeadInput["preferredPropertyTypes"])
+                : ["CONDOMINIUM"],
+              financingPreference: (row.financingPreference?.trim() || "BANK") as CreateLeadInput["financingPreference"],
+              notes: row.notes?.trim() || "Imported via CSV batch.",
+            }));
+
+          if (parsedInputs.length === 0) {
+            toast.error("No valid lead records found in CSV file.");
+            return;
+          }
+
+          bulkAddLeads(parsedInputs);
+          toast.success(`Successfully imported ${parsedInputs.length} leads into pipeline!`);
+          setIsBulkOpen(false);
+          if (csvFileInputRef.current) {
+            csvFileInputRef.current.value = "";
+          }
+        } catch {
+          toast.error("Failed to parse CSV format. Please verify columns match the template.");
+        } finally {
+          setIsParsingCsv(false);
+        }
+      },
+      error: () => {
+        toast.error("Could not read uploaded CSV file.");
+        setIsParsingCsv(false);
+      },
+    });
+  };
+
   return (
     <div className="flex flex-col h-full min-w-0 max-w-full overflow-x-hidden space-y-4 p-4 md:p-6">
       {/* Header & Controls */}
@@ -255,6 +401,92 @@ export default function PipelinePage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Export Filtered Leads to CSV */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={handleExportFilteredLeads}
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Export</span> CSV
+          </Button>
+
+          {/* Bulk Import Leads Modal */}
+          <Dialog open={isBulkOpen} onOpenChange={setIsBulkOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
+                <span className="hidden sm:inline">Bulk</span> Import
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4 text-primary" />
+                  Bulk Import Leads (CSV)
+                </DialogTitle>
+                <DialogDescription className="text-xs">
+                  Import prospect lists from property expos, Facebook ads, or partner broker networks directly into your pipeline.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-2">
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold">1. Download Lead CSV Template</span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 text-[11px] gap-1"
+                      onClick={handleDownloadLeadCsvTemplate}
+                    >
+                      <Download className="h-3 w-3" />
+                      Download .CSV
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Includes columns for First Name, Last Name, Email, Phone, Stage, Source, Priority, Min/Max Budget, and Preferences.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-xs font-semibold">2. Upload Populated CSV File</span>
+                  <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed bg-muted/10 p-6 cursor-pointer hover:bg-muted/20 transition-colors">
+                    {isParsingCsv ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    ) : (
+                      <Upload className="h-6 w-6 text-primary" />
+                    )}
+                    <span className="text-xs font-medium text-center">
+                      {isParsingCsv ? "Parsing Lead Records..." : "Click or drop your populated lead CSV file here"}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">Accepts UTF-8 .csv files</span>
+                    <input
+                      ref={csvFileInputRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={handleLeadCsvFileUpload}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsBulkOpen(false)}
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={isNewLeadOpen} onOpenChange={setIsNewLeadOpen}>
             <DialogTrigger asChild>
