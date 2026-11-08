@@ -84,6 +84,7 @@ function BuyerQuotationPortalContent() {
     moveLeadStage,
     sendMessage,
     createDealFromReservation,
+    updateQuotationStatus,
   } = useCrmStore();
   const { agentProfile } = useAuth();
 
@@ -92,6 +93,13 @@ function BuyerQuotationPortalContent() {
     () => quotations.find((q) => q.shareToken === params.token),
     [quotations, params.token]
   );
+
+  // Automatically update status to VIEWED when client opens the proposal link
+  React.useEffect(() => {
+    if (matchedQuotation && matchedQuotation.status === "SENT") {
+      updateQuotationStatus(matchedQuotation.id, "VIEWED");
+    }
+  }, [matchedQuotation, updateQuotationStatus]);
 
   const buyerLead = React.useMemo(() => {
     const leadId = searchParams.get("leadId") || matchedQuotation?.leadId;
@@ -364,6 +372,10 @@ function BuyerQuotationPortalContent() {
         signatureDataUrl,
       });
 
+      if (matchedQuotation) {
+        updateQuotationStatus(matchedQuotation.id, "ACCEPTED");
+      }
+
       sendMessage(
         buyerLead.id,
         `✅ [Digital Reservation Completed]: ${buyerLead.firstName} e-signed the Reservation Agreement & uploaded payment proof (${paymentMethod} Ref: ${referenceNo}) for ${liveInput.projectName} – ${liveInput.unitCode}. Deal Room ${createdDeal.dealNumber} is now live!`
@@ -387,6 +399,7 @@ function BuyerQuotationPortalContent() {
       ) {
         moveLeadStage(buyerLead.id, "SITE_TRIPPING");
       }
+
       sendMessage(
         buyerLead.id,
         `📅 [Buyer Portal Action]: ${buyerLead.firstName} requested a Showroom & Site Viewing for ${liveInput.projectName} (${liveInput.unitCode}).`
@@ -463,6 +476,10 @@ function BuyerQuotationPortalContent() {
     if (!chatMessageText.trim()) return;
     setIsSendingChatMessage(true);
     if (buyerLead) {
+      if (matchedQuotation) {
+        updateQuotationStatus(matchedQuotation.id, "ACCEPTED");
+      }
+
       sendMessage(
         buyerLead.id,
         `💬 [Buyer Portal Message]: "${chatMessageText.trim()}" (Regarding ${liveInput.projectName} - ${liveInput.unitCode})`

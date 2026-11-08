@@ -10,10 +10,12 @@ import {
   Calculator,
   CheckCircle2,
   Download,
+  ExternalLink,
   FileSpreadsheet,
   FileText,
   Filter,
   Flame,
+  GitFork,
   GripVertical,
   Kanban,
   LayoutList,
@@ -21,6 +23,7 @@ import {
   MapPin,
   MessageSquare,
   MoreHorizontal,
+  Plus,
   Search,
   Upload,
   UserPlus,
@@ -133,6 +136,13 @@ export default function PipelinePage() {
     () => leads.find((l) => l.id === activeLead?.id) ?? null,
     [leads, activeLead]
   );
+
+  const leadQuotations = React.useMemo(() => {
+    if (!selectedLead) return [];
+    return quotations
+      .filter((q) => q.leadId === selectedLead.id)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [quotations, selectedLead]);
 
   // Precompute readiness analysis for all leads
   const leadReadinessMap = React.useMemo(() => {
@@ -1246,6 +1256,91 @@ export default function PipelinePage() {
                     Messenger Thread
                   </Link>
                 </Button>
+              </div>
+
+              {/* Issued Quotations & Revision History */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold flex items-center gap-1.5">
+                    <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
+                    Issued Quotations ({leadQuotations.length})
+                  </Label>
+                  <Link
+                    href={`/quotations?leadId=${selectedLead.id}`}
+                    className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1"
+                  >
+                    <Plus className="h-3 w-3" />
+                    New Proposal
+                  </Link>
+                </div>
+
+                {leadQuotations.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground bg-muted/20">
+                    No quotations generated for this buyer yet.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {leadQuotations.map((q) => {
+                      const isAccepted = q.status === "ACCEPTED";
+                      const isViewed = q.status === "VIEWED";
+                      return (
+                        <div
+                          key={q.id}
+                          className="rounded-lg border bg-card/60 p-3 text-xs space-y-2 transition-colors hover:border-primary/40"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-foreground">
+                                {q.referenceNumber}
+                              </span>
+                              <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                                Rev {q.revisionNumber || 1}
+                              </Badge>
+                            </div>
+                            <Badge
+                              variant={
+                                isAccepted ? "default" : isViewed ? "secondary" : "outline"
+                              }
+                              className={cn(
+                                "text-[10px] uppercase font-semibold",
+                                isAccepted && "bg-pipeline-won text-white"
+                              )}
+                            >
+                              {q.status}
+                            </Badge>
+                          </div>
+
+                          <div className="text-muted-foreground text-[11px] truncate">
+                            {q.calculationInput.projectName} • {q.calculationInput.unitCode}
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1.5 border-t text-[11px]">
+                            <span className="font-semibold text-foreground">
+                              {formatCurrency(q.calculationInput.listPrice)}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <Link
+                                href={`/quotations?reviseQuotationId=${q.id}`}
+                                className="text-primary hover:underline inline-flex items-center gap-1 font-medium"
+                              >
+                                <GitFork className="h-3 w-3" />
+                                Revise
+                              </Link>
+                              <Link
+                                href={`/quote/${q.shareToken}`}
+                                target="_blank"
+                                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                Portal
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Interaction Notes & Timeline */}

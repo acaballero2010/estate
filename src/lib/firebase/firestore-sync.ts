@@ -169,6 +169,9 @@ export async function loadOrSeedAgentFirestoreWorkspace(
     for (const deal of defaults.deals) {
       batch.set(doc(dealsCol, deal.id), toFirestorePayload(deal));
     }
+    for (const quote of defaults.quotations) {
+      batch.set(doc(quotesCol, quote.id), toFirestorePayload(quote));
+    }
 
     await batch.commit();
 
@@ -177,7 +180,7 @@ export async function loadOrSeedAgentFirestoreWorkspace(
       properties: defaults.properties,
       messages: defaults.messages,
       deals: defaults.deals,
-      quotations: [],
+      quotations: defaults.quotations,
     };
   }
 
@@ -202,7 +205,7 @@ export async function loadOrSeedAgentFirestoreWorkspace(
     leads: leads.length > 0 ? leads : isDemoAgent ? defaults.leads : [],
     properties,
     messages: messages.length > 0 ? messages : isDemoAgent ? defaults.messages : [],
-    quotations,
+    quotations: quotations.length > 0 ? quotations : isDemoAgent ? defaults.quotations : [],
     deals: deals.length > 0 ? deals : isDemoAgent ? defaults.deals : [],
   };
 }

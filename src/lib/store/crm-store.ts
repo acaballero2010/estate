@@ -639,6 +639,157 @@ export const INITIAL_DEALS: Deal[] = [
   },
 ];
 
+export const INITIAL_QUOTATIONS: Quotation[] = [
+  {
+    id: "70000000-0000-4000-8000-000000000001",
+    referenceNumber: "QT-2026-4412",
+    revisionNumber: 1,
+    parentQuotationId: null,
+    leadId: "20000000-0000-4000-8000-000000000003", // Patricia Lim-Chua
+    agentId: AGENT_ID,
+    propertyId: "10000000-0000-4000-8000-000000000003", // Kensington Courtyard
+    status: "VIEWED",
+    validUntil: new Date("2026-11-20T00:00:00Z"),
+    calculationInput: {
+      projectName: "Kensington Courtyard Townhomes",
+      unitCode: "Unit C-09 (3-Storey Luxury Townhouse)",
+      floorAreaSqm: 165,
+      lotAreaSqm: 95,
+      listPrice: 14800000,
+      promoDiscountPercent: 2.5,
+      miscFeesPercent: 6.5,
+      includeMiscInTcp: true,
+      reservationFee: 100000,
+      downPaymentPercent: 20,
+      downPaymentTermMonths: 24,
+      annualLumpsumAmount: 0,
+      isStepUpEquity: false,
+      financingType: "BANK_FINANCING",
+      annualInterestRate: 7.5,
+      loanTenorYears: 20,
+    },
+    agentNotes:
+      "Original 24-month equity proposal sent via Messenger. Client requested stretched 36-month equity.",
+    disclaimerText:
+      "Prices, discounts, and interest rates are subject to change without prior notice. Final loan approval is subject to bank credit evaluation.",
+    pdfUrl: null,
+    shareToken: "patricia-c09",
+    createdAt: new Date("2026-11-04T10:00:00Z"),
+    updatedAt: new Date("2026-11-05T14:30:00Z"),
+  },
+  {
+    id: "70000000-0000-4000-8000-000000000002",
+    referenceNumber: "QT-2026-4412-R2",
+    revisionNumber: 2,
+    parentQuotationId: "70000000-0000-4000-8000-000000000001",
+    leadId: "20000000-0000-4000-8000-000000000003", // Patricia Lim-Chua
+    agentId: AGENT_ID,
+    propertyId: "10000000-0000-4000-8000-000000000003",
+    status: "SENT",
+    validUntil: new Date("2026-11-25T00:00:00Z"),
+    calculationInput: {
+      projectName: "Kensington Courtyard Townhomes",
+      unitCode: "Unit C-09 (3-Storey Luxury Townhouse)",
+      floorAreaSqm: 165,
+      lotAreaSqm: 95,
+      listPrice: 14800000,
+      promoDiscountPercent: 2.5,
+      miscFeesPercent: 6.5,
+      includeMiscInTcp: true,
+      reservationFee: 100000,
+      downPaymentPercent: 20,
+      downPaymentTermMonths: 36,
+      annualLumpsumAmount: 0,
+      isStepUpEquity: true,
+      financingType: "BANK_FINANCING",
+      annualInterestRate: 7.5,
+      loanTenorYears: 20,
+    },
+    agentNotes:
+      "Revision 2: Stretched down payment to 36 months with Step-Up equity structure to lower monthly cash outlay.",
+    disclaimerText:
+      "Prices, discounts, and interest rates are subject to change without prior notice. Final loan approval is subject to bank credit evaluation.",
+    pdfUrl: null,
+    shareToken: "patricia-c09-r2",
+    createdAt: new Date("2026-11-07T11:20:00Z"),
+    updatedAt: new Date("2026-11-07T11:20:00Z"),
+  },
+  {
+    id: "70000000-0000-4000-8000-000000000003",
+    referenceNumber: "QT-2026-3820",
+    revisionNumber: 1,
+    parentQuotationId: null,
+    leadId: "20000000-0000-4000-8000-000000000002", // Rafael Villanueva
+    agentId: AGENT_ID,
+    propertyId: "10000000-0000-4000-8000-000000000001", // The Meridian Park
+    status: "VIEWED",
+    validUntil: new Date("2026-11-22T00:00:00Z"),
+    calculationInput: {
+      projectName: "The Meridian Park Residences",
+      unitCode: "Tower B - 2408 (2BR Corner)",
+      floorAreaSqm: 84.5,
+      lotAreaSqm: 0,
+      listPrice: 18500000,
+      promoDiscountPercent: 3.0,
+      miscFeesPercent: 6.5,
+      includeMiscInTcp: true,
+      reservationFee: 100000,
+      downPaymentPercent: 20,
+      downPaymentTermMonths: 24,
+      annualLumpsumAmount: 150000,
+      isStepUpEquity: false,
+      financingType: "BANK_FINANCING",
+      annualInterestRate: 7.25,
+      loanTenorYears: 15,
+    },
+    agentNotes:
+      "Prepared for Saturday showroom viewing. Includes annual balloon lumpsums on months 12 and 24.",
+    disclaimerText:
+      "Prices, discounts, and interest rates are subject to change without prior notice. Final loan approval is subject to bank credit evaluation.",
+    pdfUrl: null,
+    shareToken: "rafael-bgc-2408",
+    createdAt: new Date("2026-11-06T14:00:00Z"),
+    updatedAt: new Date("2026-11-07T08:15:00Z"),
+  },
+  {
+    id: "70000000-0000-4000-8000-000000000004",
+    referenceNumber: "QT-2026-1194",
+    revisionNumber: 1,
+    parentQuotationId: null,
+    leadId: "20000000-0000-4000-8000-000000000006", // Engr. Dominic Velasco
+    agentId: AGENT_ID,
+    propertyId: "10000000-0000-4000-8000-000000000002", // Solana Verde
+    status: "ACCEPTED",
+    validUntil: new Date("2026-10-30T00:00:00Z"),
+    calculationInput: {
+      projectName: "Solana Verde Country Homes",
+      unitCode: "Block 14 Lot 8 (3BR Single Detached)",
+      floorAreaSqm: 120,
+      lotAreaSqm: 150,
+      listPrice: 9450000,
+      promoDiscountPercent: 0,
+      miscFeesPercent: 6.5,
+      includeMiscInTcp: true,
+      reservationFee: 50000,
+      downPaymentPercent: 15,
+      downPaymentTermMonths: 18,
+      annualLumpsumAmount: 0,
+      isStepUpEquity: false,
+      financingType: "BANK_FINANCING",
+      annualInterestRate: 7.5,
+      loanTenorYears: 20,
+    },
+    agentNotes:
+      "Accepted and converted to Deal DL-2026-0088. Reservation fee paid via Metrobank.",
+    disclaimerText:
+      "Official computation accepted upon reservation agreement signing.",
+    pdfUrl: null,
+    shareToken: "dominic-solana-b14",
+    createdAt: new Date("2026-09-18T09:00:00Z"),
+    updatedAt: new Date("2026-09-18T10:00:00Z"),
+  },
+];
+
 interface CrmState {
   activeAgentUid: string | null;
   isSyncingFirestore: boolean;
@@ -671,6 +822,7 @@ interface CrmState {
     metaMid?: string
   ) => void;
   saveQuotation: (quotation: Quotation) => void;
+  updateQuotationStatus: (quotationId: string, status: Quotation["status"]) => void;
   toggleDealRequirementStatus: (dealId: string, requirementId: string) => void;
   createDealFromReservation: (params: {
     leadId: string;
@@ -716,6 +868,37 @@ function saveLocalCustomProperty(property: Property, agentUid?: string | null) {
   }
 }
 
+function getLocalQuotations(agentUid?: string | null): Quotation[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const key = `propflow_quotations_${agentUid || "default"}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((q: Record<string, unknown>) => ({
+      ...(q as unknown as Quotation),
+      validUntil: new Date((q.validUntil as string) || Date.now() + 7 * 86400000),
+      createdAt: new Date((q.createdAt as string) || Date.now()),
+      updatedAt: new Date((q.updatedAt as string) || Date.now()),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalQuotation(quotation: Quotation, agentUid?: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    const key = `propflow_quotations_${agentUid || "default"}`;
+    const existing = getLocalQuotations(agentUid);
+    const updated = [quotation, ...existing.filter((q) => q.id !== quotation.id)];
+    localStorage.setItem(key, JSON.stringify(updated));
+  } catch (e) {
+    console.warn("localStorage quotation save failed:", e);
+  }
+}
+
 export const useCrmStore = create<CrmState>((set, get) => ({
   activeAgentUid: null,
   isSyncingFirestore: false,
@@ -723,7 +906,7 @@ export const useCrmStore = create<CrmState>((set, get) => ({
   properties: INITIAL_PROPERTIES,
   messages: INITIAL_MESSAGES,
   deals: INITIAL_DEALS,
-  quotations: [],
+  quotations: INITIAL_QUOTATIONS,
   selectedLeadId: INITIAL_LEADS[0]?.id ?? null,
 
   syncWithAgentAccount: async (agentUid) => {
@@ -733,13 +916,18 @@ export const useCrmStore = create<CrmState>((set, get) => ({
       INITIAL_PROPERTIES.forEach((p) => propMap.set(p.id, p));
       localProps.forEach((p) => propMap.set(p.id, p));
 
+      const localQuotes = getLocalQuotations("default");
+      const quoteMap = new Map<string, Quotation>();
+      INITIAL_QUOTATIONS.forEach((q) => quoteMap.set(q.id, q));
+      localQuotes.forEach((q) => quoteMap.set(q.id, q));
+
       set({
         activeAgentUid: null,
         leads: INITIAL_LEADS,
         properties: Array.from(propMap.values()),
         messages: INITIAL_MESSAGES,
         deals: INITIAL_DEALS,
-        quotations: [],
+        quotations: Array.from(quoteMap.values()),
         selectedLeadId: INITIAL_LEADS[0]?.id ?? null,
         isSyncingFirestore: false,
       });
@@ -752,7 +940,7 @@ export const useCrmStore = create<CrmState>((set, get) => ({
         properties: INITIAL_PROPERTIES,
         messages: INITIAL_MESSAGES,
         deals: INITIAL_DEALS,
-        quotations: [],
+        quotations: INITIAL_QUOTATIONS,
       });
 
       // Merge: Master developer catalog + local custom properties + Firestore properties + in-memory store properties
@@ -766,12 +954,23 @@ export const useCrmStore = create<CrmState>((set, get) => ({
       localProps.forEach((p) => propMap.set(p.id, p));
       workspace.properties.forEach((p) => propMap.set(p.id, p));
 
+      // Merge: Initial proposals + local custom quotations + Firestore quotations + in-memory quotations
+      const localQuotes = [
+        ...getLocalQuotations(agentUid),
+        ...getLocalQuotations("default"),
+      ];
+      const quoteMap = new Map<string, Quotation>();
+      INITIAL_QUOTATIONS.forEach((q) => quoteMap.set(q.id, q));
+      get().quotations.forEach((q) => quoteMap.set(q.id, q));
+      localQuotes.forEach((q) => quoteMap.set(q.id, q));
+      workspace.quotations.forEach((q) => quoteMap.set(q.id, q));
+
       set({
         leads: workspace.leads.length > 0 ? workspace.leads : get().leads,
         properties: Array.from(propMap.values()),
         messages: workspace.messages.length > 0 ? workspace.messages : get().messages,
         deals: workspace.deals.length > 0 ? workspace.deals : get().deals,
-        quotations: workspace.quotations.length > 0 ? workspace.quotations : get().quotations,
+        quotations: Array.from(quoteMap.values()),
         selectedLeadId: workspace.leads[0]?.id ?? get().selectedLeadId,
         isSyncingFirestore: false,
       });
@@ -1005,7 +1204,7 @@ export const useCrmStore = create<CrmState>((set, get) => ({
 
   saveQuotation: (quotation) => {
     set((state) => ({
-      quotations: [quotation, ...state.quotations],
+      quotations: [quotation, ...state.quotations.filter((q) => q.id !== quotation.id)],
       leads: state.leads.map((l) =>
         l.id === quotation.leadId
           ? {
@@ -1021,10 +1220,26 @@ export const useCrmStore = create<CrmState>((set, get) => ({
           : l
       ),
     }));
+    saveLocalQuotation(quotation, get().activeAgentUid);
+    saveLocalQuotation(quotation, "default");
     void persistAgentDocument(get().activeAgentUid, "quotations", quotation);
     const updatedLead = get().leads.find((l) => l.id === quotation.leadId);
     if (updatedLead) {
       void persistAgentDocument(get().activeAgentUid, "leads", updatedLead);
+    }
+  },
+
+  updateQuotationStatus: (quotationId, status) => {
+    set((state) => ({
+      quotations: state.quotations.map((q) =>
+        q.id === quotationId ? { ...q, status, updatedAt: new Date() } : q
+      ),
+    }));
+    const updated = get().quotations.find((q) => q.id === quotationId);
+    if (updated) {
+      saveLocalQuotation(updated, get().activeAgentUid);
+      saveLocalQuotation(updated, "default");
+      void persistAgentDocument(get().activeAgentUid, "quotations", updated);
     }
   },
 

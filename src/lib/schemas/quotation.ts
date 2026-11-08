@@ -333,9 +333,11 @@ export function computePropertyQuotation(
  */
 export const QuotationSchema = z.object({
   id: z.string().uuid(),
-  referenceNumber: z.string().min(1), // e.g., "QT-2026-0042"
+  referenceNumber: z.string().min(1), // e.g., "QT-2026-0042" or "QT-2026-0042-R2"
+  revisionNumber: z.number().int().min(1).default(1),
+  parentQuotationId: z.string().uuid().optional().nullable(),
   leadId: z.string().uuid(),
-  agentId: z.string().uuid(),
+  agentId: z.string().min(1),
   propertyId: z.string().uuid().optional(),
   status: z
     .enum(["DRAFT", "SENT", "VIEWED", "ACCEPTED", "EXPIRED"])

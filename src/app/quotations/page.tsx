@@ -11,20 +11,26 @@ import {
   Check,
   Copy,
   Download,
+  FileSpreadsheet,
+  GitFork,
   Globe2,
+  History,
   Loader2,
   Mail,
   Percent,
   Send,
+  X,
 } from "lucide-react";
 import {
   computePropertyQuotation,
   FINANCING_TYPE_DEFAULTS,
   type FinancingType,
+  type Quotation,
   QuotationCalculationInputSchema,
   type QuotationCalculationInput,
 } from "@/lib/schemas";
 import { downloadQuotationPdf } from "@/components/quotations/quotation-pdf-document";
+import { QuotationHistoryTracker } from "@/components/quotations/quotation-history-tracker";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { useCrmStore } from "@/lib/store/crm-store";
 import {
@@ -63,8 +69,16 @@ function QuotationCalculatorContent() {
   const searchParams = useSearchParams();
   const initialLeadId = searchParams.get("leadId");
   const initialPropertyId = searchParams.get("propertyId");
-  const { leads, properties, saveQuotation, sendMessage } = useCrmStore();
+  const initialReviseId = searchParams.get("reviseQuotationId");
+  const initialTab = searchParams.get("tab");
+
+  const { leads, properties, quotations, saveQuotation, sendMessage } = useCrmStore();
   const { agentProfile } = useAuth();
+
+  const [activeMainTab, setActiveMainTab] = React.useState<"CALCULATOR" | "TRACKER">(
+    initialTab === "tracker" ? "TRACKER" : "CALCULATOR"
+  );
+  const [revisingQuotation, setRevisingQuotation] = React.useState<Quotation | null>(null);
 
   const startProp =
     properties.find((p) => p.id === initialPropertyId) ?? properties[0];
@@ -138,6 +152,36 @@ function QuotationCalculatorContent() {
     [properties, form]
   );
 
+  const handleStartRevision = React.useCallback(
+    (quote: Quotation) => {
+      setRevisingQuotation(quote);
+      setSelectedLeadId(quote.leadId);
+      if (quote.propertyId) {
+        setSelectedPropertyId(quote.propertyId);
+      }
+      form.reset(quote.calculationInput);
+      setActiveMainTab("CALCULATOR");
+      toast.info(
+        `Loaded ${quote.referenceNumber} (Rev ${quote.revisionNumber || 1}) into calculator for revision.`
+      );
+    },
+    [form]
+  );
+
+  const handleCancelRevision = () => {
+    setRevisingQuotation(null);
+    toast.info("Canceled revision mode.");
+  };
+
+  React.useEffect(() => {
+    if (initialReviseId) {
+      const target = quotations.find((q) => q.id === initialReviseId);
+      if (target) {
+        handleStartRevision(target);
+      }
+    }
+  }, [initialReviseId, quotations, handleStartRevision]);
+
   React.useEffect(() => {
     if (initialLeadId) {
       setSelectedLeadId(initialLeadId);
@@ -163,16 +207,30 @@ function QuotationCalculatorContent() {
       toast.error("Please select a buyer lead first");
       return;
     }
-    const refNo = `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    const newQuotation = {
+
+    const isRevision = Boolean(revisingQuotation);
+    const nextRevisionNum = isRevision
+      ? (revisingQuotation?.revisionNumber || 1) + 1
+      : 1;
+    const baseRef = isRevision
+      ? revisingQuotation!.referenceNumber.replace(/-R\d+$/, "")
+      : `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const refNo = isRevision ? `${baseRef}-R${nextRevisionNum}` : baseRef;
+
+    const newQuotation: Quotation = {
       id: crypto.randomUUID(),
       referenceNumber: refNo,
+      revisionNumber: nextRevisionNum,
+      parentQuotationId: revisingQuotation ? revisingQuotation.id : null,
       leadId: selectedLead.id,
-      agentId: "00000000-0000-4000-8000-000000000001",
+      agentId: agentProfile?.uid || "00000000-0000-4000-8000-000000000001",
       propertyId: selectedPropertyId || undefined,
-      status: "SENT" as const,
+      status: "SENT",
       validUntil: new Date(Date.now() + 7 * 86400000),
       calculationInput: watchedValues,
+      agentNotes: isRevision
+        ? `Revision ${nextRevisionNum} of ${revisingQuotation!.referenceNumber}.`
+        : undefined,
       disclaimerText:
         "Prices, discounts, and interest rates are subject to change without prior notice. Final loan approval is subject to bank/HDMF credit evaluation.",
       pdfUrl: null,
@@ -182,19 +240,73 @@ function QuotationCalculatorContent() {
     };
 
     saveQuotation(newQuotation);
-    const equitySummaryText = watchedValues.isStepUpEquity && result.downPaymentSchedule[0]
-      ? `Starts at ${formatCurrency(result.downPaymentSchedule[0].amountDue)} (Step-Up Yr 1)`
-      : formatCurrency(result.monthlyDownPayment);
+
+    const equitySummaryText =
+      watchedValues.isStepUpEquity && result.downPaymentSchedule[0]
+        ? `Starts at ${formatCurrency(result.downPaymentSchedule[0].amountDue)} (Step-Up Yr 1)`
+        : formatCurrency(result.monthlyDownPayment);
+
+    const revisionPrefix = isRevision
+      ? `📄 [REVISION ${nextRevisionNum} - Supersedes ${revisingQuotation!.referenceNumber}]: `
+      : "📄 Attached Official Property Quotation: ";
 
     sendMessage(
       selectedLead.id,
-      `📄 Attached Official Property Quotation (${refNo}) for ${watchedValues.projectName} – ${watchedValues.unitCode}.\n• Total Contract Price: ${formatCurrency(result.totalContractPrice)}\n• Monthly Equity (${watchedValues.downPaymentTermMonths} mos): ${equitySummaryText}\n• Est. Monthly Amortization (${watchedValues.loanTenorYears} yrs @ ${watchedValues.annualInterestRate}%): ${formatCurrency(result.monthlyAmortization)}`,
+      `${revisionPrefix}(${refNo}) for ${watchedValues.projectName} – ${watchedValues.unitCode}.\n• Total Contract Price: ${formatCurrency(result.totalContractPrice)}\n• Monthly Equity (${watchedValues.downPaymentTermMonths} mos): ${equitySummaryText}\n• Est. Monthly Amortization (${watchedValues.loanTenorYears} yrs @ ${watchedValues.annualInterestRate}%): ${formatCurrency(result.monthlyAmortization)}`,
       newQuotation.id
     );
 
     toast.success(
-      `Quotation ${refNo} saved and sent to ${selectedLead.firstName}'s Messenger thread!`
+      isRevision
+        ? `Revision ${refNo} saved and dispatched to ${selectedLead.firstName}'s Messenger thread!`
+        : `Quotation ${refNo} saved and sent to ${selectedLead.firstName}'s Messenger thread!`
     );
+
+    setRevisingQuotation(null);
+    setActiveMainTab("TRACKER");
+  };
+
+  const handleSaveDraftOnly = () => {
+    if (!selectedLead) {
+      toast.error("Please select a buyer lead first");
+      return;
+    }
+
+    const isRevision = Boolean(revisingQuotation);
+    const nextRevisionNum = isRevision
+      ? (revisingQuotation?.revisionNumber || 1) + 1
+      : 1;
+    const baseRef = isRevision
+      ? revisingQuotation!.referenceNumber.replace(/-R\d+$/, "")
+      : `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const refNo = isRevision ? `${baseRef}-R${nextRevisionNum}` : baseRef;
+
+    const newQuotation: Quotation = {
+      id: crypto.randomUUID(),
+      referenceNumber: refNo,
+      revisionNumber: nextRevisionNum,
+      parentQuotationId: revisingQuotation ? revisingQuotation.id : null,
+      leadId: selectedLead.id,
+      agentId: agentProfile?.uid || "00000000-0000-4000-8000-000000000001",
+      propertyId: selectedPropertyId || undefined,
+      status: "DRAFT",
+      validUntil: new Date(Date.now() + 7 * 86400000),
+      calculationInput: watchedValues,
+      agentNotes: isRevision
+        ? `Revision ${nextRevisionNum} of ${revisingQuotation!.referenceNumber} (Draft)`
+        : "Draft computation",
+      disclaimerText:
+        "Prices, discounts, and interest rates are subject to change without prior notice. Final loan approval is subject to bank/HDMF credit evaluation.",
+      pdfUrl: null,
+      shareToken: crypto.randomUUID().slice(0, 12),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    saveQuotation(newQuotation);
+    toast.success(`Saved quotation draft ${refNo}!`);
+    setRevisingQuotation(null);
+    setActiveMainTab("TRACKER");
   };
 
   const [isGeneratingPdf, setIsGeneratingPdf] = React.useState(false);
@@ -309,64 +421,163 @@ function QuotationCalculatorContent() {
 
   return (
     <div className="container space-y-5 py-5">
-      {/* Top Action Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
+      {/* Top Header & View Mode Switcher */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-4 print:hidden">
         <div>
-          <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
-            Real Estate Quotation &amp; Amortization Calculator
+          <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl flex items-center gap-2">
+            <FileSpreadsheet className="h-6 w-6 text-primary" />
+            Quotation Engine &amp; Proposal Tracker
           </h1>
           <p className="text-xs text-muted-foreground">
-            Generate sample computations for Bank, Pag-IBIG HDMF, or In-House financing and export branded PDF sheets.
+            Compute real estate equity &amp; bank amortizations, monitor buyer portal engagement, and track revisions.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            onClick={handleCopyShareLink}
-          >
-            {copiedLink ? (
-              <Check className="h-3.5 w-3.5 text-pipeline-won" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
-            Share Link
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            disabled={isGeneratingPdf}
-            onClick={handlePrintPdf}
-          >
-            <Download className="h-3.5 w-3.5" />
-            {isGeneratingPdf ? "Generating PDF..." : "Download PDF"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            disabled={isSendingEmail}
-            onClick={handleSendEmailQuotation}
-          >
-            {isSendingEmail ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-            ) : (
-              <Mail className="h-3.5 w-3.5 text-primary" />
-            )}
-            {isSendingEmail ? "Sending..." : "Email Quote"}
-          </Button>
-          <Button
-            size="sm"
-            className="h-8 text-xs gap-1.5"
-            onClick={handleSaveAndSendToChat}
-          >
-            <Send className="h-3.5 w-3.5" />
-            Send to Messenger
-          </Button>
+
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+            <Button
+              variant={activeMainTab === "CALCULATOR" ? "default" : "ghost"}
+              size="sm"
+              className="h-8 text-xs gap-1.5 font-medium"
+              onClick={() => setActiveMainTab("CALCULATOR")}
+            >
+              <Calculator className="h-3.5 w-3.5" />
+              <span>Pricing Calculator</span>
+            </Button>
+            <Button
+              variant={activeMainTab === "TRACKER" ? "default" : "ghost"}
+              size="sm"
+              className="h-8 text-xs gap-1.5 font-medium"
+              onClick={() => setActiveMainTab("TRACKER")}
+            >
+              <History className="h-3.5 w-3.5" />
+              <span>Sent Proposals &amp; Revisions</span>
+              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+                {quotations.length}
+              </Badge>
+            </Button>
+          </div>
         </div>
       </div>
+
+      {activeMainTab === "TRACKER" ? (
+        <QuotationHistoryTracker
+          onReviseQuotation={handleStartRevision}
+          onOpenCalculator={() => setActiveMainTab("CALCULATOR")}
+        />
+      ) : (
+        <div className="space-y-5">
+          {/* Active Revision Banner */}
+          {revisingQuotation && (
+            <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <GitFork className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-foreground">
+                      Revision Mode Active:
+                    </span>
+                    <Badge variant="default" className="text-[10px] h-4 px-1.5 font-mono">
+                      Target: {revisingQuotation.referenceNumber.replace(/-R\d+$/, "")}-R{(revisingQuotation.revisionNumber || 1) + 1}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Modifying proposal parameters for{" "}
+                    <strong className="text-foreground">
+                      {selectedLead ? `${selectedLead.firstName} ${selectedLead.lastName}` : "Client"}
+                    </strong>{" "}
+                    • Original: {revisingQuotation.referenceNumber} (Rev {revisingQuotation.revisionNumber || 1}).
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground hover:text-foreground shrink-0"
+                onClick={handleCancelRevision}
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                Cancel Revision
+              </Button>
+            </div>
+          )}
+
+          {/* Calculator Action Bar */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
+            <span className="text-xs text-muted-foreground">
+              {revisingQuotation
+                ? `Editing revision terms for ${selectedLead ? `${selectedLead.firstName} ${selectedLead.lastName}` : "Client"}`
+                : "Configure pricing, discounts, and payment terms"}
+            </span>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={handleCopyShareLink}
+              >
+                {copiedLink ? (
+                  <Check className="h-3.5 w-3.5 text-pipeline-won" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+                Share Link
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                disabled={isGeneratingPdf}
+                onClick={handlePrintPdf}
+              >
+                <Download className="h-3.5 w-3.5" />
+                {isGeneratingPdf ? "Generating PDF..." : "Download PDF"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                disabled={isSendingEmail}
+                onClick={handleSendEmailQuotation}
+              >
+                {isSendingEmail ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                ) : (
+                  <Mail className="h-3.5 w-3.5 text-primary" />
+                )}
+                {isSendingEmail ? "Sending..." : "Email Quote"}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={handleSaveDraftOnly}
+              >
+                <Check className="h-3.5 w-3.5" />
+                Save Draft
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                onClick={handleSaveAndSendToChat}
+              >
+                {revisingQuotation ? (
+                  <>
+                    <GitFork className="h-3.5 w-3.5" />
+                    Save &amp; Dispatch Revision
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5" />
+                    Send to Messenger
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
 
       {/* OFW & Overseas Investor Multi-Currency Selector */}
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/20 px-4 py-2.5 print:hidden">
@@ -1072,7 +1283,9 @@ function QuotationCalculatorContent() {
         </div>
       </div>
     </div>
-  );
+  )}
+</div>
+);
 }
 
 export default function QuotationsPage() {
