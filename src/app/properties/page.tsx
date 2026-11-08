@@ -6,12 +6,15 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import Papa from "papaparse";
 import {
   Bath,
   BedDouble,
   Building2,
   Calculator,
   Car,
+  Download,
+  FileSpreadsheet,
   Film,
   Grid3X3,
   ImagePlus,
@@ -22,6 +25,7 @@ import {
   PlayCircle,
   Plus,
   Sparkles,
+  Upload,
   UploadCloud,
   Video,
 } from "lucide-react";
@@ -83,13 +87,16 @@ const DEFAULT_TOWER_FLOORS = [
 
 export default function PropertiesPage() {
   const router = useRouter();
-  const { properties, addProperty, updatePropertyStatus } = useCrmStore();
+  const { properties, addProperty, bulkAddProperties, updatePropertyStatus } = useCrmStore();
   const [isAddOpen, setIsAddOpen] = React.useState(false);
+  const [isBulkOpen, setIsBulkOpen] = React.useState(false);
+  const [isParsingCsv, setIsParsingCsv] = React.useState(false);
   const [openQuoteAfterSave, setOpenQuoteAfterSave] = React.useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = React.useState(false);
   const [isUploadingVideo, setIsUploadingVideo] = React.useState(false);
   const [uploadedPhotoPreview, setUploadedPhotoPreview] = React.useState<string | null>(null);
   const [selectedStackCell, setSelectedStackCell] = React.useState<StackingCell | null>(null);
+  const csvFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const form = useForm<CreatePropertyInput>({
     resolver: zodResolver(CreatePropertyInputSchema),
@@ -191,6 +198,123 @@ export default function PropertiesPage() {
     if (openQuoteAfterSave) {
       router.push(`/quotations?propertyId=${created.id}`);
     }
+  };
+
+  const handleDownloadCsvTemplate = () => {
+    const templateRows = [
+      {
+        projectName: "The Meridian Park Residences",
+        developerName: "Ayala Premier Estates",
+        unitCode: "Tower B - 1802 (1BR Deluxe)",
+        propertyType: "CONDOMINIUM",
+        locationCity: "Bonifacio Global City, Taguig",
+        address: "34th Street cor. 9th Ave, BGC",
+        floorAreaSqm: "42.0",
+        lotAreaSqm: "0",
+        bedrooms: "1",
+        bathrooms: "1",
+        parkingSlots: "0",
+        listPrice: "8950000",
+        reservationFee: "50000",
+        status: "AVAILABLE",
+        turnoverDate: "Q4 2027",
+        description: "High-floor deluxe 1-Bedroom overlooking the amenity deck.",
+        thumbnailUrl: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+        videoWalkthroughUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+      },
+      {
+        projectName: "Solana Verde Executive Village",
+        developerName: "Crestview Land Corp",
+        unitCode: "Blk 18 Lot 22 (Bella Model)",
+        propertyType: "HOUSE_AND_LOT",
+        locationCity: "Nuvali, Santa Rosa, Laguna",
+        address: "Solana Spine Road, Nuvali South",
+        floorAreaSqm: "165.0",
+        lotAreaSqm: "210.0",
+        bedrooms: "4",
+        bathrooms: "3",
+        parkingSlots: "2",
+        listPrice: "11800000",
+        reservationFee: "50000",
+        status: "AVAILABLE",
+        turnoverDate: "Ready for Occupancy (RFO)",
+        description: "Single detached 4BR home on corner lot with landscaped garden.",
+        thumbnailUrl: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=1200&q=80",
+        videoWalkthroughUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+      },
+    ];
+
+    const csvContent = Papa.unparse(templateRows);
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "propflow-inventory-template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("Downloaded CSV inventory import template");
+  };
+
+  const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsParsingCsv(true);
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        try {
+          const parsedInputs: CreatePropertyInput[] = results.data.map((row) => ({
+            projectName: row.projectName?.trim() || "Development Project",
+            developerName: row.developerName?.trim() || "Developer Partner",
+            unitCode: row.unitCode?.trim() || `Unit-${Date.now().toString().slice(-4)}`,
+            propertyType: (row.propertyType?.trim() || "CONDOMINIUM") as CreatePropertyInput["propertyType"],
+            locationCity: row.locationCity?.trim() || "Metro Manila",
+            address: row.address?.trim() || "Main Estate Road",
+            floorAreaSqm: parseFloat(row.floorAreaSqm || "50") || 50,
+            lotAreaSqm: parseFloat(row.lotAreaSqm || "0") || 0,
+            bedrooms: parseInt(row.bedrooms || "2", 10) || 2,
+            bathrooms: parseInt(row.bathrooms || "1", 10) || 1,
+            parkingSlots: parseInt(row.parkingSlots || "1", 10) || 0,
+            listPrice: parseFloat(row.listPrice || "7500000") || 7500000,
+            reservationFee: parseFloat(row.reservationFee || "50000") || 50000,
+            status: (row.status?.trim() || "AVAILABLE") as CreatePropertyInput["status"],
+            turnoverDate: row.turnoverDate?.trim() || "Pre-selling",
+            description: row.description?.trim() || "Accredited residential unit.",
+            amenities: ["Swimming Pool", "24/7 Security", "Clubhouse"],
+            thumbnailUrl:
+              row.thumbnailUrl?.trim() ||
+              "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+            galleryImages: [
+              row.thumbnailUrl?.trim() ||
+                "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+            ],
+            videoWalkthroughUrl: row.videoWalkthroughUrl?.trim() || undefined,
+          }));
+
+          if (parsedInputs.length === 0) {
+            toast.error("No valid property records found in CSV.");
+            return;
+          }
+
+          bulkAddProperties(parsedInputs);
+          toast.success(`Successfully imported ${parsedInputs.length} property units!`);
+          setIsBulkOpen(false);
+          if (csvFileInputRef.current) {
+            csvFileInputRef.current.value = "";
+          }
+        } catch {
+          toast.error("Error processing CSV format. Please use the standard template.");
+        } finally {
+          setIsParsingCsv(false);
+        }
+      },
+      error: () => {
+        toast.error("Failed to parse CSV file.");
+        setIsParsingCsv(false);
+      },
+    });
   };
 
   // Build Interactive Tower & Block-Lot Stacking Matrix combining live inventory + tower floors
@@ -314,6 +438,81 @@ export default function PropertiesPage() {
               Open Storefront Showcase
             </Link>
           </Button>
+
+          {/* Bulk CSV Import Dialog */}
+          <Dialog open={isBulkOpen} onOpenChange={setIsBulkOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
+                Bulk Import CSV
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4 text-primary" />
+                  Bulk Import Property Inventory
+                </DialogTitle>
+                <DialogDescription className="text-xs">
+                  Upload an Excel-exported CSV to add dozens of accredited residential units to your inventory in seconds.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-2">
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold">1. Download Standard CSV Template</span>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 text-[11px] gap-1"
+                      onClick={handleDownloadCsvTemplate}
+                    >
+                      <Download className="h-3 w-3" />
+                      Download .CSV
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Includes columns for Project Name, Unit Code, Floor/Lot sqm, Price, Reservation Fee, Turnover, and Category.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-xs font-semibold">2. Choose Populated CSV File</span>
+                  <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed bg-muted/10 p-6 cursor-pointer hover:bg-muted/20 transition-colors">
+                    {isParsingCsv ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    ) : (
+                      <Upload className="h-6 w-6 text-primary" />
+                    )}
+                    <span className="text-xs font-medium text-center">
+                      {isParsingCsv ? "Processing CSV Records..." : "Click or drop your populated CSV file here"}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">Accepts UTF-8 .csv files</span>
+                    <input
+                      ref={csvFileInputRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={handleCsvFileUpload}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsBulkOpen(false)}
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger asChild>

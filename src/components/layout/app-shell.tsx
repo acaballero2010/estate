@@ -155,7 +155,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-background md:flex-row">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-background md:flex-row">
       {/* Desktop Collapsible Sidebar */}
       <aside
         className={cn(
@@ -290,17 +290,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Main Content Area */}
       <div
         className={cn(
-          "flex min-w-0 flex-1 flex-col transition-all duration-200 pb-16 md:pb-0",
+          "flex h-screen min-w-0 flex-1 flex-col overflow-hidden transition-all duration-200",
           isCollapsed ? "md:pl-16" : "md:pl-60"
         )}
       >
-        {/* Fixed Top Header */}
-        <header
-          className={cn(
-            "fixed top-0 right-0 left-0 z-20 flex h-14 items-center justify-between gap-3 border-b bg-background/95 px-4 backdrop-blur transition-all duration-200 supports-[backdrop-filter]:bg-background/60",
-            isCollapsed ? "md:left-16" : "md:left-60"
-          )}
-        >
+        {/* Top Header (above the scrollable main body) */}
+        <header className="z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="flex items-center gap-2.5">
             {/* Mobile Hamburger Drawer */}
             <Sheet>
@@ -538,8 +533,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Page Viewport (offset by pt-14 for fixed header) */}
-        <main className="min-w-0 flex-1 overflow-x-hidden pt-14">{children}</main>
+        {/* Scrollable Page Body (scrollbar only covers the body below header) */}
+        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0">
+          {children}
+        </main>
       </div>
 
       {/* Mobile Sticky Bottom Navigation Bar */}
