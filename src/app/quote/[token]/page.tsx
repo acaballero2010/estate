@@ -11,6 +11,7 @@ import {
   Download,
   Eraser,
   FileSignature,
+  Globe2,
   Loader2,
   Lock,
   Receipt,
@@ -27,7 +28,12 @@ import { downloadQuotationPdf } from "@/components/quotations/quotation-pdf-docu
 import { uploadMediaFile } from "@/lib/firebase/storage-upload";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { useAuth } from "@/lib/firebase/auth-context";
-import { formatCurrency } from "@/lib/utils";
+import {
+  convertFromPhp,
+  CURRENCY_CONFIGS,
+  formatCurrency,
+  type SupportedCurrency,
+} from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -123,6 +129,7 @@ function BuyerQuotationPortalContent() {
   const [selectedDpMonths, setSelectedDpMonths] = React.useState<number>(
     baseInput.downPaymentTermMonths
   );
+  const [selectedCurrency, setSelectedCurrency] = React.useState<SupportedCurrency>("PHP");
   const [reservedConfirmed, setReservedConfirmed] = React.useState(false);
   const [createdDealNumber, setCreatedDealNumber] = React.useState<string | null>(
     null
@@ -351,6 +358,41 @@ function BuyerQuotationPortalContent() {
         </Button>
       </div>
 
+      {/* Multi-Currency Toggle for Overseas & OFW Buyers */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/20 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Globe2 className="h-4 w-4 text-primary" />
+          <span className="text-xs font-semibold">View in Your Earning Currency:</span>
+          <span className="text-[11px] text-muted-foreground hidden sm:inline">
+            Indicative exchange rate for overseas buyers & OFWs
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          {(Object.keys(CURRENCY_CONFIGS) as SupportedCurrency[]).map((curr) => {
+            const conf = CURRENCY_CONFIGS[curr];
+            const isSelected = selectedCurrency === curr;
+            return (
+              <Button
+                key={curr}
+                type="button"
+                size="sm"
+                variant={isSelected ? "default" : "outline"}
+                className="h-7 px-2.5 text-xs gap-1"
+                onClick={() => setSelectedCurrency(curr)}
+              >
+                <span>{conf.flag}</span>
+                <span className="font-semibold">{conf.code}</span>
+                {curr !== "PHP" && (
+                  <span className="text-[10px] opacity-75 hidden md:inline">
+                    (≈ ₱{conf.phpRate})
+                  </span>
+                )}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
       {createdDealNumber && (
         <div className="flex flex-col justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2.5 text-xs">
@@ -448,6 +490,11 @@ function BuyerQuotationPortalContent() {
               <span className="text-lg font-bold tabular-nums">
                 {formatCurrency(result.totalContractPrice)}
               </span>
+              {selectedCurrency !== "PHP" && (
+                <span className="text-xs font-semibold text-primary block tabular-nums">
+                  ≈ {formatCurrency(convertFromPhp(result.totalContractPrice, selectedCurrency), selectedCurrency)}
+                </span>
+              )}
               <span className="text-[11px] text-pipeline-won block mt-0.5">
                 Saved {formatCurrency(result.discountAmount, "PHP", 0)} Promo
                 Discount
@@ -461,6 +508,11 @@ function BuyerQuotationPortalContent() {
               <span className="text-xl font-bold text-primary tabular-nums">
                 {formatCurrency(result.monthlyDownPayment)}
               </span>
+              {selectedCurrency !== "PHP" && (
+                <span className="text-xs font-bold text-primary/80 block tabular-nums">
+                  ≈ {formatCurrency(convertFromPhp(result.monthlyDownPayment, selectedCurrency), selectedCurrency)}
+                </span>
+              )}
               <span className="text-[11px] text-muted-foreground block mt-0.5">
                 0% Interest during Equity Period
               </span>
@@ -473,6 +525,11 @@ function BuyerQuotationPortalContent() {
               <span className="text-lg font-bold tabular-nums">
                 {formatCurrency(result.monthlyAmortization)}
               </span>
+              {selectedCurrency !== "PHP" && (
+                <span className="text-xs font-semibold text-primary block tabular-nums">
+                  ≈ {formatCurrency(convertFromPhp(result.monthlyAmortization, selectedCurrency), selectedCurrency)}
+                </span>
+              )}
               <span className="text-[11px] text-muted-foreground block mt-0.5">
                 {FINANCING_TYPE_DEFAULTS[liveInput.financingType].label} @{" "}
                 {liveInput.annualInterestRate}%

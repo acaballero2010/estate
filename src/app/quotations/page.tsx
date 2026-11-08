@@ -11,6 +11,7 @@ import {
   Check,
   Copy,
   Download,
+  Globe2,
   Loader2,
   Mail,
   Percent,
@@ -26,7 +27,12 @@ import {
 import { downloadQuotationPdf } from "@/components/quotations/quotation-pdf-document";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { useCrmStore } from "@/lib/store/crm-store";
-import { formatCurrency } from "@/lib/utils";
+import {
+  convertFromPhp,
+  CURRENCY_CONFIGS,
+  formatCurrency,
+  type SupportedCurrency,
+} from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,6 +76,7 @@ function QuotationCalculatorContent() {
     startProp?.id || ""
   );
   const [copiedLink, setCopiedLink] = React.useState(false);
+  const [selectedCurrency, setSelectedCurrency] = React.useState<SupportedCurrency>("PHP");
 
   const selectedLead = leads.find((l) => l.id === selectedLeadId);
 
@@ -350,6 +357,41 @@ function QuotationCalculatorContent() {
             <Send className="h-3.5 w-3.5" />
             Send to Messenger
           </Button>
+        </div>
+      </div>
+
+      {/* OFW & Overseas Investor Multi-Currency Selector */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/20 px-4 py-2.5 print:hidden">
+        <div className="flex items-center gap-2">
+          <Globe2 className="h-4 w-4 text-primary" />
+          <span className="text-xs font-semibold">Overseas & OFW Currency Switcher:</span>
+          <span className="text-[11px] text-muted-foreground hidden sm:inline">
+            Toggle rates to see quotation in foreign buyer earning currency
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          {(Object.keys(CURRENCY_CONFIGS) as SupportedCurrency[]).map((curr) => {
+            const conf = CURRENCY_CONFIGS[curr];
+            const isSelected = selectedCurrency === curr;
+            return (
+              <Button
+                key={curr}
+                type="button"
+                size="sm"
+                variant={isSelected ? "default" : "outline"}
+                className="h-7 px-2.5 text-xs gap-1"
+                onClick={() => setSelectedCurrency(curr)}
+              >
+                <span>{conf.flag}</span>
+                <span className="font-semibold">{conf.code}</span>
+                {curr !== "PHP" && (
+                  <span className="text-[10px] opacity-75 hidden md:inline">
+                    (≈ ₱{conf.phpRate})
+                  </span>
+                )}
+              </Button>
+            );
+          })}
         </div>
       </div>
 
@@ -675,6 +717,11 @@ function QuotationCalculatorContent() {
                   <span className="text-base font-bold tabular-nums">
                     {formatCurrency(result.totalContractPrice)}
                   </span>
+                  {selectedCurrency !== "PHP" && (
+                    <span className="text-xs font-semibold text-primary block tabular-nums">
+                      ≈ {formatCurrency(convertFromPhp(result.totalContractPrice, selectedCurrency), selectedCurrency)}
+                    </span>
+                  )}
                   <span className="text-[10px] text-pipeline-won block mt-0.5">
                     Includes {watchedValues.promoDiscountPercent}% Promo Discount
                   </span>
@@ -687,6 +734,11 @@ function QuotationCalculatorContent() {
                   <span className="text-lg font-bold text-primary tabular-nums">
                     {formatCurrency(result.monthlyDownPayment)}
                   </span>
+                  {selectedCurrency !== "PHP" && (
+                    <span className="text-xs font-bold text-primary/80 block tabular-nums">
+                      ≈ {formatCurrency(convertFromPhp(result.monthlyDownPayment, selectedCurrency), selectedCurrency)}
+                    </span>
+                  )}
                   <span className="text-[10px] text-muted-foreground block mt-0.5">
                     Net of {formatCurrency(watchedValues.reservationFee, "PHP", 0)} Reservation
                   </span>
@@ -699,6 +751,11 @@ function QuotationCalculatorContent() {
                   <span className="text-base font-bold tabular-nums">
                     {formatCurrency(result.monthlyAmortization)}
                   </span>
+                  {selectedCurrency !== "PHP" && (
+                    <span className="text-xs font-semibold text-primary block tabular-nums">
+                      ≈ {formatCurrency(convertFromPhp(result.monthlyAmortization, selectedCurrency), selectedCurrency)}
+                    </span>
+                  )}
                   <span className="text-[10px] text-muted-foreground block mt-0.5">
                     {
                       FINANCING_TYPE_DEFAULTS[watchedValues.financingType]
