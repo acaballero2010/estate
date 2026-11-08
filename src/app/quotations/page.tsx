@@ -11,6 +11,8 @@ import {
   Check,
   Copy,
   Download,
+  Loader2,
+  Mail,
   Percent,
   Send,
 } from "lucide-react";
@@ -184,6 +186,49 @@ function QuotationCalculatorContent() {
   };
 
   const [isGeneratingPdf, setIsGeneratingPdf] = React.useState(false);
+  const [isSendingEmail, setIsSendingEmail] = React.useState(false);
+
+  const handleSendEmailQuotation = async () => {
+    if (!selectedLead?.email) {
+      toast.error("Selected lead does not have an email address specified.");
+      return;
+    }
+
+    setIsSendingEmail(true);
+    const refNo = `QT-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    const token = selectedLead.id.slice(0, 8);
+    const shareUrl = `${window.location.origin}/quote/${token}?leadId=${selectedLead.id}&unit=${encodeURIComponent(watchedValues.unitCode)}`;
+
+    try {
+      const response = await fetch("/api/quotations/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientEmail: selectedLead.email,
+          recipientName: `${selectedLead.firstName} ${selectedLead.lastName}`,
+          referenceNumber: refNo,
+          projectName: watchedValues.projectName,
+          unitCode: watchedValues.unitCode,
+          totalContractPriceFormatted: formatCurrency(result.totalContractPrice),
+          monthlyDownPaymentFormatted: formatCurrency(result.monthlyDownPayment),
+          monthlyAmortizationFormatted: formatCurrency(result.monthlyAmortization),
+          shareUrl,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to dispatch email");
+      }
+
+      toast.success(`Dispatched quotation email to ${selectedLead.email}!`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send email";
+      toast.error(msg);
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
 
   const handlePrintPdf = async () => {
     try {
@@ -282,6 +327,20 @@ function QuotationCalculatorContent() {
           >
             <Download className="h-3.5 w-3.5" />
             {isGeneratingPdf ? "Generating PDF..." : "Download PDF"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            disabled={isSendingEmail}
+            onClick={handleSendEmailQuotation}
+          >
+            {isSendingEmail ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+            ) : (
+              <Mail className="h-3.5 w-3.5 text-primary" />
+            )}
+            {isSendingEmail ? "Sending..." : "Email Quote"}
           </Button>
           <Button
             size="sm"
