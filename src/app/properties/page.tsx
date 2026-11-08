@@ -13,11 +13,15 @@ import {
   Building2,
   Calculator,
   Car,
+  CheckCircle2,
+  Coins,
   Download,
   FileSpreadsheet,
   Film,
   Grid3X3,
+  Home,
   ImagePlus,
+  Layers,
   LayoutGrid,
   Loader2,
   MapPin,
@@ -28,7 +32,6 @@ import {
   ShieldCheck,
   Sparkles,
   Upload,
-  UploadCloud,
   UserCheck,
   Video,
 } from "lucide-react";
@@ -572,280 +575,451 @@ export default function PropertiesPage() {
                 Add Property Unit
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Add New Property / Unit to Inventory</DialogTitle>
-                <DialogDescription>
-                  Enter project specifications, upload photos/videos from your device, and configure pricing.
-                </DialogDescription>
+            <DialogContent className="p-0 gap-0 sm:max-w-2xl md:max-w-3xl max-h-[88vh] flex flex-col overflow-hidden border shadow-2xl">
+              {/* Sticky Top Header */}
+              <DialogHeader className="px-6 py-4 border-b bg-card shrink-0 pr-12">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Building2 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-base font-bold text-foreground">
+                      Add New Property / Unit to Inventory
+                    </DialogTitle>
+                    <DialogDescription className="text-xs text-muted-foreground">
+                      Enter project specifications, upload media tours, and configure pricing for your exclusive inventory.
+                    </DialogDescription>
+                  </div>
+                </div>
               </DialogHeader>
 
+              {/* Form with Flex-1 Scrollable Body + Pinned Sticky Footer */}
               <form
                 onSubmit={form.handleSubmit(onSubmitNewProperty)}
-                className="space-y-3 py-2"
+                className="flex-1 flex flex-col min-h-0 overflow-hidden"
               >
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-project">Project / Estate Name</Label>
-                    <Input
-                      id="prop-project"
-                      placeholder="e.g. Parklinks North Tower"
-                      {...form.register("projectName")}
-                    />
-                    {form.formState.errors.projectName && (
-                      <p className="text-[11px] text-destructive">
-                        {form.formState.errors.projectName.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-dev">Developer Name</Label>
-                    <Input
-                      id="prop-dev"
-                      placeholder="e.g. Ayala Land Premier"
-                      {...form.register("developerName")}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-unit">Unit / Block-Lot Code</Label>
-                    <Input
-                      id="prop-unit"
-                      placeholder="e.g. Tower B - 2608 (2BR Corner)"
-                      {...form.register("unitCode")}
-                    />
-                    {form.formState.errors.unitCode && (
-                      <p className="text-[11px] text-destructive">
-                        {form.formState.errors.unitCode.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-type">Property Category</Label>
-                    <select
-                      id="prop-type"
-                      {...form.register("propertyType")}
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm"
-                    >
-                      <option value="CONDOMINIUM">Condominium</option>
-                      <option value="HOUSE_AND_LOT">House & Lot</option>
-                      <option value="TOWNHOUSE">Townhouse</option>
-                      <option value="RESIDENTIAL_LOT">Residential Lot</option>
-                      <option value="COMMERCIAL_UNIT">Commercial Unit</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-city">City / Location</Label>
-                    <Input
-                      id="prop-city"
-                      placeholder="e.g. Pasig / Quezon City"
-                      {...form.register("locationCity")}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-turnover">Turnover Status / Date</Label>
-                    <Input
-                      id="prop-turnover"
-                      placeholder="e.g. Ready for Occupancy (RFO)"
-                      {...form.register("turnoverDate")}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="prop-addr">Exact Street / Estate Address</Label>
-                  <Input
-                    id="prop-addr"
-                    placeholder="e.g. C5 Road, Brgy. Ugong Norte"
-                    {...form.register("address")}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                  <div className="space-y-1">
-                    <Label>Floor (sqm)</Label>
-                    <Input
-                      type="number"
-                      step="0.5"
-                      {...form.register("floorAreaSqm", {
-                        valueAsNumber: true,
-                      })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Lot (sqm)</Label>
-                    <Input
-                      type="number"
-                      step="0.5"
-                      {...form.register("lotAreaSqm", { valueAsNumber: true })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Bedrooms</Label>
-                    <Input
-                      type="number"
-                      {...form.register("bedrooms", { valueAsNumber: true })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Baths</Label>
-                    <Input
-                      type="number"
-                      {...form.register("bathrooms", { valueAsNumber: true })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Parking</Label>
-                    <Input
-                      type="number"
-                      {...form.register("parkingSlots", {
-                        valueAsNumber: true,
-                      })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-price">Total List Price (₱)</Label>
-                    <Input
-                      id="prop-price"
-                      type="number"
-                      step="50000"
-                      className="tabular-nums font-semibold"
-                      {...form.register("listPrice", { valueAsNumber: true })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="prop-res">Standard Reservation Fee (₱)</Label>
-                    <Input
-                      id="prop-res"
-                      type="number"
-                      step="5000"
-                      className="tabular-nums"
-                      {...form.register("reservationFee", {
-                        valueAsNumber: true,
-                      })}
-                    />
-                  </div>
-                </div>
-
-                {/* Direct File Uploader for Photos & Walkthrough Video */}
-                <div className="rounded-lg border border-dashed bg-muted/20 p-3 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold flex items-center gap-1.5">
-                      <UploadCloud className="h-3.5 w-3.5 text-primary" />
-                      Upload Property Media (Firebase Storage / Local Device)
-                    </span>
-                    {uploadedPhotoPreview && (
-                      <Badge variant="won" className="text-[10px]">
-                        Media Attached ✓
+                {/* Scrollable Form Content */}
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                  {/* SECTION 1: PROJECT & DEVELOPER IDENTIFICATION */}
+                  <div className="rounded-xl border bg-card/60 p-4 space-y-3.5">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5 text-primary" />
+                        1. Project &amp; Unit Identification
+                      </span>
+                      <Badge variant="outline" className="text-[10px]">
+                        Required Info
                       </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="prop-project" className="text-xs font-semibold">
+                          Project / Estate Name *
+                        </Label>
+                        <Input
+                          id="prop-project"
+                          placeholder="e.g. The Meridian Park Residences"
+                          className="h-9 text-xs"
+                          {...form.register("projectName")}
+                        />
+                        {form.formState.errors.projectName && (
+                          <p className="text-[11px] font-medium text-destructive">
+                            {form.formState.errors.projectName.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="prop-dev" className="text-xs font-semibold">
+                          Developer Partner *
+                        </Label>
+                        <Input
+                          id="prop-dev"
+                          placeholder="e.g. Ayala Land Premier / Megaworld"
+                          className="h-9 text-xs"
+                          {...form.register("developerName")}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="prop-unit" className="text-xs font-semibold">
+                          Unit / Block-Lot Identifier *
+                        </Label>
+                        <Input
+                          id="prop-unit"
+                          placeholder="e.g. Tower B - 2608 (2BR Corner)"
+                          className="h-9 text-xs"
+                          {...form.register("unitCode")}
+                        />
+                        {form.formState.errors.unitCode && (
+                          <p className="text-[11px] font-medium text-destructive">
+                            {form.formState.errors.unitCode.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="prop-type" className="text-xs font-semibold">
+                          Property Category *
+                        </Label>
+                        <select
+                          id="prop-type"
+                          {...form.register("propertyType")}
+                          className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                        >
+                          <option value="CONDOMINIUM">Condominium</option>
+                          <option value="HOUSE_AND_LOT">House &amp; Lot</option>
+                          <option value="TOWNHOUSE">Townhouse</option>
+                          <option value="RESIDENTIAL_LOT">Residential Lot</option>
+                          <option value="COMMERCIAL_UNIT">Commercial Unit</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 2: LOCATION & HANDOVER TIMELINE */}
+                  <div className="rounded-xl border bg-card/60 p-4 space-y-3.5">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-primary" />
+                        2. Location &amp; Handover Schedule
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="prop-city" className="text-xs font-semibold">
+                          City / District *
+                        </Label>
+                        <Input
+                          id="prop-city"
+                          placeholder="e.g. Bonifacio Global City, Taguig"
+                          className="h-9 text-xs"
+                          {...form.register("locationCity")}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="prop-turnover" className="text-xs font-semibold">
+                          Turnover Status / Target *
+                        </Label>
+                        <Input
+                          id="prop-turnover"
+                          placeholder="e.g. Ready for Occupancy (RFO) or Q4 2027"
+                          className="h-9 text-xs"
+                          {...form.register("turnoverDate")}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="prop-addr" className="text-xs font-semibold">
+                        Complete Estate / Street Address
+                      </Label>
+                      <Input
+                        id="prop-addr"
+                        placeholder="e.g. 34th Street cor. 9th Avenue, Bonifacio Global City, Taguig"
+                        className="h-9 text-xs"
+                        {...form.register("address")}
+                      />
+                    </div>
+                  </div>
+
+                  {/* SECTION 3: ARCHITECTURAL SPECIFICATIONS & DIMENSIONS */}
+                  <div className="rounded-xl border bg-card/60 p-4 space-y-3.5">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Layers className="h-3.5 w-3.5 text-primary" />
+                        3. Architectural Dimensions &amp; Layout
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                      <div className="rounded-lg border bg-background p-2.5 space-y-1.5">
+                        <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                          <Maximize2 className="h-3 w-3 text-primary" />
+                          <span>Floor Area</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            step="0.5"
+                            className="h-8 text-xs font-semibold tabular-nums"
+                            {...form.register("floorAreaSqm", { valueAsNumber: true })}
+                          />
+                          <span className="text-[10px] text-muted-foreground">sqm</span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border bg-background p-2.5 space-y-1.5">
+                        <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                          <Home className="h-3 w-3 text-primary" />
+                          <span>Lot Area</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            step="0.5"
+                            className="h-8 text-xs font-semibold tabular-nums"
+                            {...form.register("lotAreaSqm", { valueAsNumber: true })}
+                          />
+                          <span className="text-[10px] text-muted-foreground">sqm</span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg border bg-background p-2.5 space-y-1.5">
+                        <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                          <BedDouble className="h-3 w-3 text-primary" />
+                          <span>Bedrooms</span>
+                        </div>
+                        <Input
+                          type="number"
+                          min="0"
+                          className="h-8 text-xs font-semibold tabular-nums"
+                          {...form.register("bedrooms", { valueAsNumber: true })}
+                        />
+                      </div>
+
+                      <div className="rounded-lg border bg-background p-2.5 space-y-1.5">
+                        <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                          <Bath className="h-3 w-3 text-primary" />
+                          <span>Bathrooms</span>
+                        </div>
+                        <Input
+                          type="number"
+                          min="0"
+                          className="h-8 text-xs font-semibold tabular-nums"
+                          {...form.register("bathrooms", { valueAsNumber: true })}
+                        />
+                      </div>
+
+                      <div className="rounded-lg border bg-background p-2.5 space-y-1.5">
+                        <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                          <Car className="h-3 w-3 text-primary" />
+                          <span>Parking</span>
+                        </div>
+                        <Input
+                          type="number"
+                          min="0"
+                          className="h-8 text-xs font-semibold tabular-nums"
+                          {...form.register("parkingSlots", { valueAsNumber: true })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 4: PRICING & PAYMENT TERMS */}
+                  <div className="rounded-xl border bg-card/60 p-4 space-y-3.5">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Coins className="h-3.5 w-3.5 text-primary" />
+                        4. Pricing &amp; Reservation Terms
+                      </span>
+                      <Badge variant="won" className="text-[10px]">
+                        Philippine Peso (PHP)
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="prop-price" className="text-xs font-semibold">
+                            Total List Price (₱) *
+                          </Label>
+                          <span className="text-[11px] font-bold text-primary tabular-nums">
+                            {formatCurrency(form.watch("listPrice") || 0, "PHP", 0)}
+                          </span>
+                        </div>
+                        <Input
+                          id="prop-price"
+                          type="number"
+                          step="50000"
+                          className="h-9 text-xs font-semibold tabular-nums"
+                          {...form.register("listPrice", { valueAsNumber: true })}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="prop-res" className="text-xs font-semibold">
+                            Standard Reservation Fee (₱) *
+                          </Label>
+                          <span className="text-[11px] font-bold text-muted-foreground tabular-nums">
+                            {formatCurrency(form.watch("reservationFee") || 0, "PHP", 0)}
+                          </span>
+                        </div>
+                        <Input
+                          id="prop-res"
+                          type="number"
+                          step="5000"
+                          className="h-9 text-xs tabular-nums"
+                          {...form.register("reservationFee", { valueAsNumber: true })}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 5: MEDIA & VIDEO TOUR */}
+                  <div className="rounded-xl border bg-card/60 p-4 space-y-3.5">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <ImagePlus className="h-3.5 w-3.5 text-primary" />
+                        5. Visual Media &amp; Walkthrough Tour
+                      </span>
+                      {uploadedPhotoPreview && (
+                        <Badge variant="won" className="text-[10px] gap-1">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Media Attached
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed bg-muted/20 px-4 py-3 text-xs font-medium hover:bg-accent hover:border-primary/50 transition-colors">
+                        {isUploadingPhoto ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        ) : (
+                          <ImagePlus className="h-4 w-4 text-primary" />
+                        )}
+                        <span>
+                          {isUploadingPhoto ? "Uploading Photo..." : "Upload Photos (JPG/PNG)"}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={handlePhotoFileUpload}
+                        />
+                      </label>
+
+                      <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed bg-muted/20 px-4 py-3 text-xs font-medium hover:bg-accent hover:border-primary/50 transition-colors">
+                        {isUploadingVideo ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        ) : (
+                          <Video className="h-4 w-4 text-primary" />
+                        )}
+                        <span>
+                          {isUploadingVideo ? "Uploading Video..." : "Upload Video Tour (.mp4)"}
+                        </span>
+                        <input
+                          type="file"
+                          accept="video/*"
+                          className="hidden"
+                          onChange={handleVideoFileUpload}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="prop-thumb" className="text-[11px] text-muted-foreground">
+                          Or Direct Cover Photo URL
+                        </Label>
+                        <Input
+                          id="prop-thumb"
+                          className="h-8 text-xs"
+                          placeholder="https://images.unsplash.com/..."
+                          {...form.register("thumbnailUrl")}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor="prop-video" className="text-[11px] text-muted-foreground">
+                          Or Walkthrough Tour Video URL (.mp4)
+                        </Label>
+                        <Input
+                          id="prop-video"
+                          className="h-8 text-xs"
+                          placeholder="https://.../walkthrough.mp4"
+                          {...form.register("videoWalkthroughUrl")}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Live Photo Preview */}
+                    {(uploadedPhotoPreview || form.watch("thumbnailUrl")) && (
+                      <div className="flex items-center gap-3 pt-1">
+                        <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg border bg-muted">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={uploadedPhotoPreview || form.watch("thumbnailUrl") || ""}
+                            alt="Property Preview"
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = "none";
+                            }}
+                          />
+                        </div>
+                        <div className="text-xs">
+                          <span className="font-semibold block">Cover Image Attached</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            Will be displayed in Showcase, Quotations, and Social Marketing Cards.
+                          </span>
+                        </div>
+                      </div>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium hover:bg-accent transition-colors">
-                      {isUploadingPhoto ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                      ) : (
-                        <ImagePlus className="h-3.5 w-3.5 text-primary" />
-                      )}
-                      <span>
-                        {isUploadingPhoto
-                          ? "Uploading Photo..."
-                          : "Upload Photos (JPG/PNG)"}
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={handlePhotoFileUpload}
-                      />
-                    </label>
-
-                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium hover:bg-accent transition-colors">
-                      {isUploadingVideo ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                      ) : (
-                        <Video className="h-3.5 w-3.5 text-primary" />
-                      )}
-                      <span>
-                        {isUploadingVideo
-                          ? "Uploading Video..."
-                          : "Upload Video Tour (.mp4)"}
-                      </span>
-                      <input
-                        type="file"
-                        accept="video/*"
-                        className="hidden"
-                        onChange={handleVideoFileUpload}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="prop-thumb" className="text-[11px]">
-                        Or Cover Photo URL
-                      </Label>
-                      <Input
-                        id="prop-thumb"
-                        className="h-8 text-xs"
-                        placeholder="https://images.unsplash.com/..."
-                        {...form.register("thumbnailUrl")}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="prop-video" className="text-[11px]">
-                        Or Walkthrough Video URL (.mp4)
-                      </Label>
-                      <Input
-                        id="prop-video"
-                        className="h-8 text-xs"
-                        placeholder="https://.../walkthrough.mp4"
-                        {...form.register("videoWalkthroughUrl")}
-                      />
-                    </div>
+                  {/* SECTION 6: STOREFRONT DESCRIPTION */}
+                  <div className="rounded-xl border bg-card/60 p-4 space-y-2">
+                    <Label htmlFor="prop-desc" className="text-xs font-semibold flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      Storefront Highlight &amp; Marketing Teaser
+                    </Label>
+                    <Input
+                      id="prop-desc"
+                      className="h-9 text-xs"
+                      placeholder="e.g. Corner 2BR penthouse overlooking golf course with floor-to-ceiling glass and smart home automation"
+                      {...form.register("description")}
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <Label htmlFor="prop-desc">
-                    Storefront Highlight Description
-                  </Label>
-                  <Input
-                    id="prop-desc"
-                    placeholder="e.g. Corner 2BR overlooking golf course with smart home automation"
-                    {...form.register("description")}
-                  />
-                </div>
+                {/* FIXED STICKY FOOTER */}
+                <DialogFooter className="px-6 py-3.5 border-t bg-card/95 backdrop-blur shrink-0 flex items-center justify-between sm:justify-between w-full">
+                  <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+                    <UserCheck className="h-3.5 w-3.5 text-pipeline-won shrink-0" />
+                    <span>
+                      Publishing to:{" "}
+                      <strong className="text-foreground">
+                        {agentProfile?.fullName || "My Agent Portfolio"}
+                      </strong>
+                    </span>
+                  </div>
 
-                <DialogFooter className="gap-2 pt-3">
-                  <Button
-                    type="submit"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setOpenQuoteAfterSave(false)}
-                  >
-                    Save to Inventory
-                  </Button>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    onClick={() => setOpenQuoteAfterSave(true)}
-                  >
-                    Save & Configure Quotation →
-                  </Button>
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 text-xs"
+                      onClick={() => setIsAddOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 text-xs"
+                      onClick={() => setOpenQuoteAfterSave(false)}
+                    >
+                      Save to Inventory
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="h-9 text-xs gap-1.5 shadow-sm"
+                      onClick={() => setOpenQuoteAfterSave(true)}
+                    >
+                      <Calculator className="h-3.5 w-3.5" />
+                      Save &amp; Configure Quotation →
+                    </Button>
+                  </div>
                 </DialogFooter>
               </form>
             </DialogContent>
