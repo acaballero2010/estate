@@ -32,6 +32,7 @@ import {
 import {
   downloadQuotationPdf,
   generateAndUploadQuotationPdf,
+  generateQuotationPdfBlob,
 } from "@/components/quotations/quotation-pdf-document";
 import { QuotationHistoryTracker } from "@/components/quotations/quotation-history-tracker";
 import { useAuth } from "@/lib/firebase/auth-context";
@@ -361,6 +362,47 @@ function QuotationCalculatorContent() {
     const shareUrl = `${window.location.origin}/quote/${token}?leadId=${selectedLead.id}&unit=${encodeURIComponent(watchedValues.unitCode)}`;
 
     try {
+      // Generate PDF blob to attach directly to the email
+      let pdfBase64: string | undefined;
+      let cloudPdfUrl: string | undefined;
+
+      try {
+        const buyerName = `${selectedLead.firstName} ${selectedLead.lastName}`;
+        const pdfBlob = await generateQuotationPdfBlob({
+          referenceNumber: refNo,
+          buyerName,
+          agentName: agentProfile?.fullName,
+          agentLicense: agentProfile?.prcLicenseNumber,
+          input: watchedValues,
+          result,
+        });
+
+        pdfBase64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const res = reader.result as string;
+            resolve(res.split(",")[1] || "");
+          };
+          reader.readAsDataURL(pdfBlob);
+        });
+
+        // Also upload to cloud in background for direct download link
+        try {
+          cloudPdfUrl = await generateAndUploadQuotationPdf({
+            referenceNumber: refNo,
+            buyerName,
+            agentName: agentProfile?.fullName,
+            agentLicense: agentProfile?.prcLicenseNumber,
+            input: watchedValues,
+            result,
+          });
+        } catch (uploadErr) {
+          console.warn("Could not pre-upload PDF for email link:", uploadErr);
+        }
+      } catch (pdfErr) {
+        console.warn("Could not render PDF blob for email attachment:", pdfErr);
+      }
+
       const response = await fetch("/api/quotations/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -377,6 +419,8 @@ function QuotationCalculatorContent() {
               : formatCurrency(result.monthlyDownPayment),
           monthlyAmortizationFormatted: formatCurrency(result.monthlyAmortization),
           shareUrl,
+          pdfUrl: cloudPdfUrl,
+          pdfBase64,
         }),
       });
 
@@ -385,7 +429,13 @@ function QuotationCalculatorContent() {
         throw new Error(data.error || "Failed to dispatch email");
       }
 
-      toast.success(`Dispatched quotation email to ${selectedLead.email}!`);
+      if (data.mode === "live_smtp") {
+        toast.success(`Official quotation email delivered to ${selectedLead.email}!`);
+      } else {
+        toast.success(
+          `Quotation dispatched to ${selectedLead.email} (Simulated mode). Configure SMTP in .env.local for live production delivery.`
+        );
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to send email";
       toast.error(msg);

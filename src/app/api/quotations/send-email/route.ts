@@ -12,6 +12,7 @@ const SendQuotationEmailSchema = z.object({
   monthlyDownPaymentFormatted: z.string().min(1),
   monthlyAmortizationFormatted: z.string().min(1),
   shareUrl: z.string().url().optional(),
+  pdfUrl: z.string().url().optional(),
   pdfBase64: z.string().optional(),
 });
 
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
       monthlyDownPaymentFormatted,
       monthlyAmortizationFormatted,
       shareUrl,
+      pdfUrl,
       pdfBase64,
     } = payload.data;
 
@@ -97,15 +99,20 @@ export async function POST(request: NextRequest) {
               <p style="margin: 0 0 8px 0;"><strong>Monthly Equity Installment:</strong> <span style="color: #1d4ed8; font-weight: bold;">${monthlyDownPaymentFormatted}</span></p>
               <p style="margin: 0;"><strong>Est. Monthly Amortization:</strong> ${monthlyAmortizationFormatted}</p>
             </div>
-            ${
-              shareUrl
-                ? `<p style="text-align: center; margin: 24px 0;">
-                    <a href="${shareUrl}" style="background-color: #2563eb; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 13px; display: inline-block;">View Interactive Quotation Portal & E-Sign</a>
-                   </p>`
-                : ""
-            }
+            <div style="text-align: center; margin: 24px 0;">
+              ${
+                shareUrl
+                  ? `<a href="${shareUrl}" style="background-color: #2563eb; color: #ffffff; padding: 11px 22px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 13px; display: inline-block; margin-right: 8px;">View Interactive Quotation Portal &amp; E-Sign</a>`
+                  : ""
+              }
+              ${
+                pdfUrl
+                  ? `<a href="${pdfUrl}" style="background-color: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px; display: inline-block;">Download Official PDF</a>`
+                  : ""
+              }
+            </div>
             <p style="font-size: 12px; color: #64748b; margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
-              Your official PDF quotation sheet is attached. Please feel free to reply directly to this email or reach out to your licensed property consultant.
+              Your official PDF quotation sheet is attached. Please feel free to reply directly to this email or reach out to your accredited licensed property consultant.
             </p>
           </div>
         `,
