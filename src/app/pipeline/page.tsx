@@ -25,6 +25,9 @@ import {
   Upload,
   UserPlus,
   Wallet,
+  Sparkles,
+  TrendingUp,
+  Zap,
 } from "lucide-react";
 import {
   CreateLeadInputSchema,
@@ -33,6 +36,10 @@ import {
   type PipelineStage,
   PIPELINE_STAGE_LABELS,
 } from "@/lib/schemas";
+import {
+  calculateLeadReadiness,
+  type LeadReadinessAnalysis,
+} from "@/lib/lead-scoring";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
@@ -99,9 +106,18 @@ const STAGE_BADGE_VARIANT: Record<PipelineStage, BadgeProps["variant"]> = {
 };
 
 export default function PipelinePage() {
-  const { leads, moveLeadStage, addLead, bulkAddLeads, addLeadNote } = useCrmStore();
+  const {
+    leads,
+    properties,
+    quotations,
+    moveLeadStage,
+    addLead,
+    bulkAddLeads,
+    addLeadNote,
+  } = useCrmStore();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [priorityFilter, setPriorityFilter] = React.useState<string>("ALL");
+  const [onlyHotLeads, setOnlyHotLeads] = React.useState(false);
   const [activeLead, setActiveLead] = React.useState<Lead | null>(null);
   const [draggedLeadId, setDraggedLeadId] = React.useState<string | null>(null);
   const [dragOverStage, setDragOverStage] =
@@ -118,9 +134,31 @@ export default function PipelinePage() {
     [leads, activeLead]
   );
 
+  // Precompute readiness analysis for all leads
+  const leadReadinessMap = React.useMemo(() => {
+    const map = new Map<string, LeadReadinessAnalysis>();
+    for (const lead of leads) {
+      map.set(lead.id, calculateLeadReadiness(lead, properties, quotations));
+    }
+    return map;
+  }, [leads, properties, quotations]);
+
+  // Selected lead's detailed analysis
+  const selectedLeadAnalysis = React.useMemo(() => {
+    if (!selectedLead) return null;
+    return (
+      leadReadinessMap.get(selectedLead.id) ??
+      calculateLeadReadiness(selectedLead, properties, quotations)
+    );
+  }, [selectedLead, leadReadinessMap, properties, quotations]);
+
   // Filter leads
   const filteredLeads = React.useMemo(() => {
     return leads.filter((lead) => {
+      const analysis = leadReadinessMap.get(lead.id);
+      if (onlyHotLeads && analysis?.tier !== "HOT" && lead.priority !== "HOT") {
+        return false;
+      }
       const matchesPriority =
         priorityFilter === "ALL" || lead.priority === priorityFilter;
       const q = searchQuery.toLowerCase().trim();
@@ -136,7 +174,7 @@ export default function PipelinePage() {
           locMatch)
       );
     });
-  }, [leads, searchQuery, priorityFilter]);
+  }, [leads, searchQuery, priorityFilter, onlyHotLeads, leadReadinessMap]);
 
   // Drag & Drop handlers with optimistic UI + Toast
   const handleDragStart = (e: React.DragEvent, leadId: string) => {
@@ -401,6 +439,26 @@ export default function PipelinePage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Hot Leads Only Quick Filter Toggle */}
+          <Button
+            type="button"
+            variant={onlyHotLeads ? "destructive" : "outline"}
+            size="sm"
+            className={cn(
+              "h-8 text-xs gap-1.5 transition-all",
+              onlyHotLeads && "bg-rose-600 hover:bg-rose-700 text-white shadow-sm ring-2 ring-rose-500/20"
+            )}
+            onClick={() => setOnlyHotLeads(!onlyHotLeads)}
+          >
+            <Flame className={cn("h-3.5 w-3.5", onlyHotLeads ? "fill-white" : "text-rose-500")} />
+            <span>Hot Leads Only</span>
+            {onlyHotLeads && (
+              <span className="ml-1 rounded-full bg-white/20 px-1.5 py-0.2 text-[10px] font-bold">
+                {filteredLeads.length}
+              </span>
+            )}
+          </Button>
 
           {/* Export Filtered Leads to CSV */}
           <Button
@@ -706,6 +764,29 @@ export default function PipelinePage() {
                             className="flex items-center gap-1"
                             onClick={(e) => e.stopPropagation()}
                           >
+                            {(() => {
+                              const analysis = leadReadinessMap.get(lead.id);
+                              if (!analysis) return null;
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "h-4 px-1.5 text-[9px] gap-0.5 font-semibold",
+                                    analysis.badgeClass
+                                  )}
+                                  title={`Qualification Score: ${analysis.totalScore}/100 • ${analysis.tierLabel}`}
+                                >
+                                  {analysis.tier === "HOT" ? (
+                                    <Flame className="h-2.5 w-2.5 fill-current text-rose-500" />
+                                  ) : analysis.tier === "HIGH" ? (
+                                    <Sparkles className="h-2.5 w-2.5 text-amber-500" />
+                                  ) : (
+                                    <TrendingUp className="h-2.5 w-2.5" />
+                                  )}
+                                  <span>{analysis.totalScore}</span>
+                                </Badge>
+                              );
+                            })()}
                             {lead.priority === "HOT" && (
                               <Badge
                                 variant="destructive"
@@ -836,6 +917,7 @@ export default function PipelinePage() {
                 <TableRow>
                   <TableHead>Buyer Name</TableHead>
                   <TableHead>Stage</TableHead>
+                  <TableHead>Readiness</TableHead>
                   <TableHead>Target Budget</TableHead>
                   <TableHead className="hidden md:table-cell">
                     Preferred Location
@@ -865,6 +947,30 @@ export default function PipelinePage() {
                       <Badge variant={STAGE_BADGE_VARIANT[lead.stage]}>
                         {PIPELINE_STAGE_LABELS[lead.stage]}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const analysis = leadReadinessMap.get(lead.id);
+                        if (!analysis) return null;
+                        return (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] h-5 px-1.5 font-semibold gap-1",
+                              analysis.badgeClass
+                            )}
+                          >
+                            {analysis.tier === "HOT" ? (
+                              <Flame className="h-3 w-3 fill-current text-rose-500" />
+                            ) : analysis.tier === "HIGH" ? (
+                              <Sparkles className="h-3 w-3 text-amber-500" />
+                            ) : (
+                              <TrendingUp className="h-3 w-3" />
+                            )}
+                            <span>{analysis.totalScore}/100</span>
+                          </Badge>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="tabular-nums text-xs font-medium">
                       {formatCompactCurrency(lead.budgetMin)} –{" "}
@@ -946,6 +1052,150 @@ export default function PipelinePage() {
                   ))}
                 </div>
               </div>
+
+              {/* AI Lead Qualification & Readiness Matrix */}
+              {selectedLeadAnalysis && (
+                <div className="rounded-xl border bg-card p-3.5 space-y-3 shadow-sm">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Sparkles className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold leading-tight flex items-center gap-1.5">
+                          AI Buyer Qualification Matrix
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] h-4 px-1.5",
+                              selectedLeadAnalysis.badgeClass
+                            )}
+                          >
+                            {selectedLeadAnalysis.tierLabel}
+                          </Badge>
+                        </h4>
+                        <span className="text-[10px] text-muted-foreground">
+                          PropFlow Algorithmic Buyer Score
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-lg font-serif font-bold text-primary tabular-nums">
+                        {selectedLeadAnalysis.totalScore}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground font-semibold">
+                        /100
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 4 Score Pillars Grid */}
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="rounded-lg border bg-muted/20 p-2 space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-foreground">
+                          1. Financing Profile
+                        </span>
+                        <span className="font-bold text-primary tabular-nums">
+                          {selectedLeadAnalysis.financingScore.earned}/
+                          {selectedLeadAnalysis.financingScore.max}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground line-clamp-2">
+                        {selectedLeadAnalysis.financingScore.summary}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border bg-muted/20 p-2 space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-foreground">
+                          2. Inventory Match
+                        </span>
+                        <span className="font-bold text-primary tabular-nums">
+                          {selectedLeadAnalysis.inventoryScore.earned}/
+                          {selectedLeadAnalysis.inventoryScore.max}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground line-clamp-2">
+                        {selectedLeadAnalysis.inventoryScore.summary}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border bg-muted/20 p-2 space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-foreground">
+                          3. KYC Documents
+                        </span>
+                        <span className="font-bold text-primary tabular-nums">
+                          {selectedLeadAnalysis.kycScore.earned}/
+                          {selectedLeadAnalysis.kycScore.max}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground line-clamp-2">
+                        {selectedLeadAnalysis.kycScore.summary}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border bg-muted/20 p-2 space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-foreground">
+                          4. Engagement Velocity
+                        </span>
+                        <span className="font-bold text-primary tabular-nums">
+                          {selectedLeadAnalysis.engagementScore.earned}/
+                          {selectedLeadAnalysis.engagementScore.max}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground line-clamp-2">
+                        {selectedLeadAnalysis.engagementScore.summary}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* AI Recommended Next Action */}
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5 flex items-start gap-2">
+                    <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-primary block">
+                        Recommended Next Action:
+                      </span>
+                      <p className="text-xs text-foreground font-medium">
+                        {selectedLeadAnalysis.recommendedAction}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Matching Units Link */}
+                  {selectedLeadAnalysis.matchingProperties.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                        Top Matching Accredited Units (
+                        {selectedLeadAnalysis.matchingProperties.length})
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedLeadAnalysis.matchingProperties
+                          .slice(0, 3)
+                          .map((prop) => (
+                            <Button
+                              key={prop.id}
+                              variant="outline"
+                              size="sm"
+                              className="h-6 text-[10px] px-2 gap-1"
+                              asChild
+                            >
+                              <Link
+                                href={`/quotations?leadId=${selectedLead.id}&propertyId=${prop.id}`}
+                              >
+                                <Calculator className="h-2.5 w-2.5 text-primary" />
+                                {prop.projectName} ({prop.unitCode})
+                              </Link>
+                            </Button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Financial & Property Profile */}
               <div className="grid grid-cols-2 gap-2.5 rounded-lg border bg-muted/30 p-3 text-xs">
