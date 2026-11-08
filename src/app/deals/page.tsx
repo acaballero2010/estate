@@ -7,11 +7,13 @@ import {
   Clock,
   Download,
   FileCheck2,
+  FileText,
   Receipt,
   Users,
 } from "lucide-react";
 import { computeDealCommissionMetrics } from "@/lib/schemas";
 import { downloadCommissionVoucherPdf } from "@/components/deals/commission-voucher-pdf";
+import { downloadReservationAgreementPdf } from "@/components/deals/reservation-agreement-pdf";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -192,28 +194,59 @@ export default function DealsPage() {
                         {formatCurrency(metrics.grossCommissionPool)}
                       </span>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-[11px] gap-1.5"
-                      onClick={async () => {
-                        await downloadCommissionVoucherPdf({
-                          deal,
-                          buyerName: buyer
-                            ? `${buyer.firstName} ${buyer.lastName}`
-                            : "Assigned Buyer",
-                          projectName:
-                            property?.projectName || "Accredited Development",
-                          unitCode: property?.unitCode || "Reserved Unit",
-                        });
-                        toast.success(
-                          `Downloaded Commission Voucher PDF (${deal.dealNumber})`
-                        );
-                      }}
-                    >
-                      <Download className="h-3 w-3 text-primary" />
-                      Download Commission Voucher PDF
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px] gap-1.5"
+                        onClick={async () => {
+                          await downloadReservationAgreementPdf({
+                            deal,
+                            buyerName: buyer
+                              ? `${buyer.firstName} ${buyer.lastName}`
+                              : "Assigned Buyer",
+                            buyerEmail: buyer?.email,
+                            buyerPhone: buyer?.phone,
+                            projectName:
+                              property?.projectName || "Accredited Development",
+                            developerName:
+                              property?.developerName || "Ayala Premier Estates",
+                            unitCode: property?.unitCode || "Reserved Unit",
+                            floorAreaSqm: property?.floorAreaSqm || 84.5,
+                            parkingSlots: property?.parkingSlots || 1,
+                            turnoverDate: property?.turnoverDate || "Q4 2027",
+                          });
+                          toast.success(
+                            `Downloaded Signed Reservation Agreement (RAF) PDF (${deal.dealNumber})`
+                          );
+                        }}
+                      >
+                        <FileText className="h-3 w-3 text-primary" />
+                        Reservation Agreement (RAF)
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px] gap-1.5"
+                        onClick={async () => {
+                          await downloadCommissionVoucherPdf({
+                            deal,
+                            buyerName: buyer
+                              ? `${buyer.firstName} ${buyer.lastName}`
+                              : "Assigned Buyer",
+                            projectName:
+                              property?.projectName || "Accredited Development",
+                            unitCode: property?.unitCode || "Reserved Unit",
+                          });
+                          toast.success(
+                            `Downloaded Commission Voucher PDF (${deal.dealNumber})`
+                          );
+                        }}
+                      >
+                        <Download className="h-3 w-3 text-primary" />
+                        Commission Voucher
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardHeader>

@@ -103,7 +103,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         badge: properties.length,
       },
       {
-        title: "Storefront",
+        title: "Showcase",
         href: "/showcase",
         icon: Film,
       },

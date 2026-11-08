@@ -88,7 +88,7 @@ export default function DashboardPage() {
           <Button variant="outline" size="sm" asChild>
             <Link href="/showcase">
               <Film className="mr-1.5 h-3.5 w-3.5 text-primary" />
-              Storefront &amp; Tours
+              Showcase
             </Link>
           </Button>
           <Button variant="outline" size="sm" asChild>
@@ -343,7 +343,7 @@ export default function DashboardPage() {
               <Badge variant="new">Photos &amp; Video</Badge>
             </div>
             <CardTitle className="mt-2 text-base">
-              Property Storefront &amp; Virtual Tours
+              Property Showcase &amp; Virtual Tours
             </CardTitle>
             <CardDescription className="text-xs">
               Showcase architectural photo galleries, model unit video walkthroughs, and amenities to buyers.
@@ -352,7 +352,7 @@ export default function DashboardPage() {
           <CardContent className="p-4 pt-0">
             <Button size="sm" className="w-full text-xs" asChild>
               <Link href="/showcase">
-                Explore Storefront <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+                Explore Showcase <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
               </Link>
             </Button>
           </CardContent>

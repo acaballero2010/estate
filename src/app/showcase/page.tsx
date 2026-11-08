@@ -271,7 +271,7 @@ function ShowcaseStorefrontContent() {
       <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/15 via-background to-secondary/40 p-6 sm:p-8">
         <div className="max-w-2xl space-y-3">
           <Badge variant="new" className="gap-1.5 text-xs">
-            <Sparkles className="h-3.5 w-3.5" /> Interactive Property Storefront &amp; Virtual Tours
+            <Sparkles className="h-3.5 w-3.5" /> Interactive Property Showcase &amp; Virtual Tours
           </Badge>
           <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
             Explore Model Units, Architectural Photos &amp; Video Walkthroughs

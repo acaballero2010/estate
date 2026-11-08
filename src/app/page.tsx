@@ -84,7 +84,7 @@ export default function PublicLandingPage() {
               Pillars &amp; Solutions
             </a>
             <Link href="/showcase" className="hover:text-foreground transition-colors">
-              Virtual Storefront
+              Showcase
             </Link>
             <Link href="/quotations" className="hover:text-foreground transition-colors">
               Amortization Studio
@@ -848,7 +848,7 @@ export default function PublicLandingPage() {
               <Link href="/dashboard" className="hover:text-foreground">Command Center</Link>
               <Link href="/pipeline" className="hover:text-foreground">Pipeline</Link>
               <Link href="/quotations" className="hover:text-foreground">Quotations</Link>
-              <Link href="/showcase" className="hover:text-foreground">Storefront</Link>
+              <Link href="/showcase" className="hover:text-foreground">Showcase</Link>
               <Link href="/deals" className="hover:text-foreground">Deal Rooms</Link>
               <Link href="/login" className="hover:text-foreground">Agent Login</Link>
             </div>
