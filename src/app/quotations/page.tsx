@@ -95,6 +95,7 @@ function QuotationCalculatorContent() {
       downPaymentPercent: 20,
       downPaymentTermMonths: 24,
       annualLumpsumAmount: 0,
+      isStepUpEquity: false,
       financingType: "BANK_FINANCING",
       annualInterestRate: 7.5,
       loanTenorYears: 15,
@@ -181,9 +182,13 @@ function QuotationCalculatorContent() {
     };
 
     saveQuotation(newQuotation);
+    const equitySummaryText = watchedValues.isStepUpEquity && result.downPaymentSchedule[0]
+      ? `Starts at ${formatCurrency(result.downPaymentSchedule[0].amountDue)} (Step-Up Yr 1)`
+      : formatCurrency(result.monthlyDownPayment);
+
     sendMessage(
       selectedLead.id,
-      `📄 Attached Official Property Quotation (${refNo}) for ${watchedValues.projectName} – ${watchedValues.unitCode}.\n• Total Contract Price: ${formatCurrency(result.totalContractPrice)}\n• Monthly Equity (${watchedValues.downPaymentTermMonths} mos): ${formatCurrency(result.monthlyDownPayment)}\n• Est. Monthly Amortization (${watchedValues.loanTenorYears} yrs @ ${watchedValues.annualInterestRate}%): ${formatCurrency(result.monthlyAmortization)}`,
+      `📄 Attached Official Property Quotation (${refNo}) for ${watchedValues.projectName} – ${watchedValues.unitCode}.\n• Total Contract Price: ${formatCurrency(result.totalContractPrice)}\n• Monthly Equity (${watchedValues.downPaymentTermMonths} mos): ${equitySummaryText}\n• Est. Monthly Amortization (${watchedValues.loanTenorYears} yrs @ ${watchedValues.annualInterestRate}%): ${formatCurrency(result.monthlyAmortization)}`,
       newQuotation.id
     );
 
@@ -217,7 +222,10 @@ function QuotationCalculatorContent() {
           projectName: watchedValues.projectName,
           unitCode: watchedValues.unitCode,
           totalContractPriceFormatted: formatCurrency(result.totalContractPrice),
-          monthlyDownPaymentFormatted: formatCurrency(result.monthlyDownPayment),
+          monthlyDownPaymentFormatted:
+            watchedValues.isStepUpEquity && result.downPaymentSchedule[0]
+              ? `Starts at ${formatCurrency(result.downPaymentSchedule[0].amountDue)} (Step-Up Yr 1)`
+              : formatCurrency(result.monthlyDownPayment),
           monthlyAmortizationFormatted: formatCurrency(result.monthlyAmortization),
           shareUrl,
         }),
@@ -562,6 +570,25 @@ function QuotationCalculatorContent() {
                 </div>
               </div>
 
+              {/* Step-Up Escalating Down Payment Toggle */}
+              <div className="flex items-center justify-between rounded-lg border bg-muted/20 p-2.5">
+                <div>
+                  <span className="text-xs font-semibold block">Step-Up Escalating Down Payment</span>
+                  <span className="text-[10px] text-muted-foreground block">
+                    Lower starter payments in Yr 1 (0.7x), standard Yr 2 (1.0x), stepped Yr 3 (1.3x)
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={watchedValues.isStepUpEquity ? "default" : "outline"}
+                  className="h-7 px-3 text-[11px]"
+                  onClick={() => form.setValue("isStepUpEquity", !watchedValues.isStepUpEquity)}
+                >
+                  {watchedValues.isStepUpEquity ? "Enabled ✓" : "Enable Step-Up"}
+                </Button>
+              </div>
+
               {/* Annual Balloon / Lumpsum Equity Option */}
               <div className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -728,19 +755,38 @@ function QuotationCalculatorContent() {
                 </div>
 
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                  <span className="text-[11px] font-medium text-primary block">
-                    Monthly Equity ({watchedValues.downPaymentTermMonths} mos)
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-primary block">
+                      Monthly Equity ({watchedValues.downPaymentTermMonths} mos)
+                    </span>
+                    {watchedValues.isStepUpEquity && (
+                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-primary text-primary font-semibold">
+                        Step-Up Active
+                      </Badge>
+                    )}
+                  </div>
                   <span className="text-lg font-bold text-primary tabular-nums">
-                    {formatCurrency(result.monthlyDownPayment)}
+                    {watchedValues.isStepUpEquity && result.downPaymentSchedule[0]
+                      ? `Starts at ${formatCurrency(result.downPaymentSchedule[0].amountDue)}`
+                      : formatCurrency(result.monthlyDownPayment)}
                   </span>
                   {selectedCurrency !== "PHP" && (
                     <span className="text-xs font-bold text-primary/80 block tabular-nums">
-                      ≈ {formatCurrency(convertFromPhp(result.monthlyDownPayment, selectedCurrency), selectedCurrency)}
+                      ≈ {formatCurrency(
+                        convertFromPhp(
+                          watchedValues.isStepUpEquity && result.downPaymentSchedule[0]
+                            ? result.downPaymentSchedule[0].amountDue
+                            : result.monthlyDownPayment,
+                          selectedCurrency
+                        ),
+                        selectedCurrency
+                      )}
                     </span>
                   )}
                   <span className="text-[10px] text-muted-foreground block mt-0.5">
-                    Net of {formatCurrency(watchedValues.reservationFee, "PHP", 0)} Reservation
+                    {watchedValues.isStepUpEquity
+                      ? `Yr 1: ${formatCurrency(result.downPaymentSchedule[0]?.amountDue ?? 0)} · Yr 2: ${formatCurrency(result.downPaymentSchedule[12]?.amountDue ?? result.downPaymentSchedule[0]?.amountDue ?? 0)}`
+                      : `Net of ${formatCurrency(watchedValues.reservationFee, "PHP", 0)} Reservation`}
                   </span>
                 </div>
 

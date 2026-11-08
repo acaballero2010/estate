@@ -298,7 +298,7 @@ export function QuotationPdfDocument({
           <View style={pdfStyles.tableRowHighlight}>
             <Text style={pdfStyles.colLeft}>
               Net Equity Down Payment ({input.downPaymentTermMonths} Monthly
-              Installments)
+              Installments{input.isStepUpEquity ? " - Step-Up Escalating Scheme" : ""})
             </Text>
             <Text style={pdfStyles.colRight}>
               {fmtPhp(result.netDownPayment)} ({fmtPhp(result.monthlyDownPayment)}

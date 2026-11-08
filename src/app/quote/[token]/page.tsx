@@ -117,6 +117,7 @@ function BuyerQuotationPortalContent() {
       downPaymentPercent: 20,
       downPaymentTermMonths: 24,
       annualLumpsumAmount: 0,
+      isStepUpEquity: false,
       financingType: "BANK_FINANCING",
       annualInterestRate: 7.5,
       loanTenorYears: 15,
@@ -128,6 +129,9 @@ function BuyerQuotationPortalContent() {
   );
   const [selectedDpMonths, setSelectedDpMonths] = React.useState<number>(
     baseInput.downPaymentTermMonths
+  );
+  const [isStepUp, setIsStepUp] = React.useState<boolean>(
+    baseInput.isStepUpEquity ?? false
   );
   const [selectedCurrency, setSelectedCurrency] = React.useState<SupportedCurrency>("PHP");
   const [reservedConfirmed, setReservedConfirmed] = React.useState(false);
@@ -155,8 +159,9 @@ function BuyerQuotationPortalContent() {
       ...baseInput,
       loanTenorYears: selectedTenor,
       downPaymentTermMonths: selectedDpMonths,
+      isStepUpEquity: isStepUp,
     }),
-    [baseInput, selectedTenor, selectedDpMonths]
+    [baseInput, selectedTenor, selectedDpMonths, isStepUp]
   );
 
   const result = React.useMemo(
@@ -458,6 +463,20 @@ function BuyerQuotationPortalContent() {
                   </Button>
                 ))}
               </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[11px] text-muted-foreground">
+                  Step-Up Scheme (Lower Yr 1 starter payment)
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={isStepUp ? "default" : "outline"}
+                  className="h-6 px-2 text-[10px]"
+                  onClick={() => setIsStepUp(!isStepUp)}
+                >
+                  {isStepUp ? "Step-Up Active ✓" : "Enable Step-Up"}
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -502,19 +521,38 @@ function BuyerQuotationPortalContent() {
             </div>
 
             <div className="rounded-lg border border-primary/40 bg-primary/5 p-3.5">
-              <span className="text-xs font-medium text-primary block">
-                Monthly Down Payment ({selectedDpMonths} mos)
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-primary block">
+                  Monthly Down Payment ({selectedDpMonths} mos)
+                </span>
+                {isStepUp && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-primary text-primary font-semibold">
+                    Step-Up
+                  </Badge>
+                )}
+              </div>
               <span className="text-xl font-bold text-primary tabular-nums">
-                {formatCurrency(result.monthlyDownPayment)}
+                {isStepUp && result.downPaymentSchedule[0]
+                  ? `Starts at ${formatCurrency(result.downPaymentSchedule[0].amountDue)}`
+                  : formatCurrency(result.monthlyDownPayment)}
               </span>
               {selectedCurrency !== "PHP" && (
                 <span className="text-xs font-bold text-primary/80 block tabular-nums">
-                  ≈ {formatCurrency(convertFromPhp(result.monthlyDownPayment, selectedCurrency), selectedCurrency)}
+                  ≈ {formatCurrency(
+                    convertFromPhp(
+                      isStepUp && result.downPaymentSchedule[0]
+                        ? result.downPaymentSchedule[0].amountDue
+                        : result.monthlyDownPayment,
+                      selectedCurrency
+                    ),
+                    selectedCurrency
+                  )}
                 </span>
               )}
               <span className="text-[11px] text-muted-foreground block mt-0.5">
-                0% Interest during Equity Period
+                {isStepUp
+                  ? `Yr 1 starter equity · 0% interest period`
+                  : `0% Interest during Equity Period`}
               </span>
             </div>
 

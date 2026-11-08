@@ -90,6 +90,7 @@ export const QuotationCalculationInputSchema = z
       .nonnegative("Balloon lumpsum cannot be negative")
       .optional()
       .default(0),
+    isStepUpEquity: z.boolean().optional().default(false),
 
     // Loan Amortization Rules
     financingType: FinancingTypeEnum.default("BANK_FINANCING"),
@@ -229,22 +230,46 @@ export function computePropertyQuotation(
   const requiredGrossMonthlyIncome =
     monthlyAmortization > 0 ? monthlyAmortization / 0.3 : 0;
 
-  // Build Down Payment Equity Schedule
+  // Build Down Payment Equity Schedule (supports Standard Equal, Annual Balloon, and Step-Up Escalating)
   const downPaymentSchedule: PaymentScheduleRow[] = [];
   let runningEquityBalance = netDownPayment;
 
+  // Step-Up Escalating calculations (e.g. Year 1: 0.7x, Year 2: 1.0x, Year 3+: 1.3x weight)
+  const totalYears = Math.ceil(input.downPaymentTermMonths / 12);
+  const getStepUpWeight = (month: number) => {
+    if (!input.isStepUpEquity || totalYears <= 1) return 1.0;
+    const yearNumber = Math.ceil(month / 12);
+    if (yearNumber === 1) return 0.7; // Lower starter payment in Year 1
+    if (yearNumber === 2) return 1.0; // Standard in Year 2
+    return 1.3; // Stretched higher in Year 3+
+  };
+
+  let totalWeightSum = 0;
+  for (let m = 1; m <= input.downPaymentTermMonths; m++) {
+    totalWeightSum += getStepUpWeight(m);
+  }
+
+  const baseUnitEquity = totalWeightSum > 0 ? regularEquityPool / totalWeightSum : 0;
+
   for (let m = 1; m <= input.downPaymentTermMonths; m++) {
     const isBalloonMonth = m % 12 === 0 && effectiveAnnualLumpsum > 0;
+    const baseMonthEquity = input.isStepUpEquity
+      ? baseUnitEquity * getStepUpWeight(m)
+      : monthlyDownPayment;
+
     const installmentDue =
-      monthlyDownPayment + (isBalloonMonth ? effectiveAnnualLumpsum : 0);
+      baseMonthEquity + (isBalloonMonth ? effectiveAnnualLumpsum : 0);
     runningEquityBalance = Math.max(0, runningEquityBalance - installmentDue);
+
+    const yearNumber = Math.ceil(m / 12);
+    const stepLabel = input.isStepUpEquity ? ` [Step-Up Yr ${yearNumber}]` : "";
+    const balloonLabel = isBalloonMonth ? " (+ Balloon Lumpsum)" : "";
+
     downPaymentSchedule.push({
       installmentNumber: m,
       stage: "DOWN_PAYMENT",
       dueDateOffsetMonths: m,
-      label: isBalloonMonth
-        ? `Equity Month ${m} of ${input.downPaymentTermMonths} (+ Balloon Lumpsum)`
-        : `Equity Month ${m} of ${input.downPaymentTermMonths}`,
+      label: `Equity Month ${m} of ${input.downPaymentTermMonths}${stepLabel}${balloonLabel}`,
       amountDue: installmentDue,
       principalComponent: installmentDue,
       interestComponent: 0,
