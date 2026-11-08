@@ -383,10 +383,31 @@ export function QuotationPdfDocument({
 }
 
 /**
+ * Renders the Quotation PDF as a Blob
+ */
+export async function generateQuotationPdfBlob(props: QuotationPdfProps): Promise<Blob> {
+  return await pdf(<QuotationPdfDocument {...props} />).toBlob();
+}
+
+/**
+ * Generates and uploads the PDF to Firebase Cloud Storage, returning a persistent download URL
+ */
+export async function generateAndUploadQuotationPdf(props: QuotationPdfProps): Promise<string> {
+  const blob = await generateQuotationPdfBlob(props);
+  const file = new File(
+    [blob],
+    `${props.referenceNumber}_${props.input.unitCode.replace(/[^a-zA-Z0-9-_]/g, "_").slice(0, 24)}.pdf`,
+    { type: "application/pdf" }
+  );
+  const { uploadMediaFile } = await import("@/lib/firebase/storage-upload");
+  return uploadMediaFile(file, "quotations");
+}
+
+/**
  * Generates and triggers a non-blocking browser download of the PDF quotation
  */
 export async function downloadQuotationPdf(props: QuotationPdfProps) {
-  const blob = await pdf(<QuotationPdfDocument {...props} />).toBlob();
+  const blob = await generateQuotationPdfBlob(props);
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;

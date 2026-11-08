@@ -10,15 +10,21 @@ import {
   CalendarCheck,
   Check,
   CheckCircle2,
+  Clock,
   Download,
   Eraser,
+  Eye,
+  FileCheck,
   FileSignature,
+  FileText,
+  FileWarning,
   Globe2,
   Loader2,
   Lock,
   MessageCircle,
   Phone,
   Receipt,
+  RefreshCw,
   Scale,
   Send,
   ShieldCheck,
@@ -30,6 +36,7 @@ import {
 import {
   computePropertyQuotation,
   FINANCING_TYPE_DEFAULTS,
+  STANDARD_KYC_REQUIREMENTS,
   type Property,
   type QuotationCalculationInput,
 } from "@/lib/schemas";
@@ -85,6 +92,7 @@ function BuyerQuotationPortalContent() {
     sendMessage,
     createDealFromReservation,
     updateQuotationStatus,
+    addLeadDocument,
   } = useCrmStore();
   const { agentProfile } = useAuth();
 
@@ -491,6 +499,65 @@ function BuyerQuotationPortalContent() {
     setIsChatOpen(false);
   };
 
+  const [uploadingDocCode, setUploadingDocCode] = React.useState<string | null>(null);
+
+  const kycMetrics = React.useMemo(() => {
+    const docs = buyerLead?.documents ?? [];
+    const requiredDefs = STANDARD_KYC_REQUIREMENTS.filter((r) => r.required);
+    const uploadedRequiredCount = requiredDefs.filter((r) =>
+      docs.some((d) => d.type === r.type)
+    ).length;
+    const verifiedCount = docs.filter(
+      (d) => d.verified || d.status === "VERIFIED"
+    ).length;
+    const progressPct = Math.round(
+      (uploadedRequiredCount / (requiredDefs.length || 1)) * 100
+    );
+    return {
+      totalRequired: requiredDefs.length,
+      uploadedRequiredCount,
+      verifiedCount,
+      progressPct,
+    };
+  }, [buyerLead?.documents]);
+
+  const handleKycFileUpload = async (
+    reqDef: (typeof STANDARD_KYC_REQUIREMENTS)[number],
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!buyerLead) {
+      toast.error(
+        "Lead profile not found. Please contact your property specialist."
+      );
+      return;
+    }
+
+    setUploadingDocCode(reqDef.code);
+    try {
+      const fileUrl = await uploadMediaFile(file, "kyc");
+      addLeadDocument(buyerLead.id, {
+        name: file.name,
+        type: reqDef.type,
+        fileUrl,
+        verified: false,
+      });
+      toast.success(
+        `Uploaded ${reqDef.label}! Your accredited broker has been notified for review.`
+      );
+    } catch (err) {
+      console.error("KYC Document upload failed:", err);
+      toast.error(
+        "Failed to upload document. Please try again or reach out to your broker."
+      );
+    } finally {
+      setUploadingDocCode(null);
+      event.target.value = "";
+    }
+  };
+
   return (
     <div className="container max-w-4xl space-y-6 py-6">
       {/* Verified Share Portal Banner */}
@@ -834,6 +901,213 @@ function BuyerQuotationPortalContent() {
                 {formatCurrency(liveInput.reservationFee, "PHP", 0)})
               </Button>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Buyer Documentary Requirements & KYC Checklist Card */}
+      <Card className="border shadow-sm">
+        <CardHeader className="border-b bg-muted/20 p-4">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  KYC &amp; Documentary Requirements Checklist
+                  <Badge variant="outline" className="text-[10px] font-normal">
+                    Real Estate Compliance Vault
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Upload documentary requirements for unit reservation approval, buyer accreditation, and contract-to-sell execution.
+                </CardDescription>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <Badge
+                variant={kycMetrics.progressPct === 100 ? "won" : "secondary"}
+                className="text-xs px-2.5 py-1 gap-1"
+              >
+                {kycMetrics.progressPct === 100 ? (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                ) : (
+                  <Clock className="h-3.5 w-3.5" />
+                )}
+                {kycMetrics.uploadedRequiredCount} of {kycMetrics.totalRequired} Required Completed ({kycMetrics.progressPct}%)
+              </Badge>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-3">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn(
+                  "h-full transition-all duration-500",
+                  kycMetrics.progressPct === 100
+                    ? "bg-emerald-600"
+                    : kycMetrics.progressPct > 50
+                    ? "bg-primary"
+                    : "bg-amber-500"
+                )}
+                style={{ width: `${kycMetrics.progressPct}%` }}
+              />
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-4 space-y-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {STANDARD_KYC_REQUIREMENTS.map((req) => {
+              const matchingDoc = buyerLead?.documents.find(
+                (d) => d.type === req.type
+              );
+              const isUploadingThis = uploadingDocCode === req.code;
+              const isVerified = matchingDoc?.status === "VERIFIED" || matchingDoc?.verified;
+              const isRejected = matchingDoc?.status === "REJECTED";
+              const isPending = !!matchingDoc && !isVerified && !isRejected;
+
+              return (
+                <div
+                  key={req.code}
+                  className={cn(
+                    "flex flex-col justify-between rounded-xl border p-3.5 transition-all text-xs",
+                    isVerified
+                      ? "border-emerald-500/30 bg-emerald-500/5"
+                      : isRejected
+                      ? "border-destructive/30 bg-destructive/5"
+                      : matchingDoc
+                      ? "border-amber-500/30 bg-amber-500/5"
+                      : "border-border bg-card hover:border-primary/40"
+                  )}
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-semibold text-foreground flex items-center gap-1.5">
+                        {isVerified ? (
+                          <FileCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+                        ) : isRejected ? (
+                          <FileWarning className="h-4 w-4 text-destructive shrink-0" />
+                        ) : matchingDoc ? (
+                          <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+                        ) : (
+                          <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                        )}
+                        <span>{req.label}</span>
+                      </div>
+                      <Badge
+                        variant={
+                          isVerified
+                            ? "won"
+                            : isRejected
+                            ? "destructive"
+                            : isPending
+                            ? "outline"
+                            : req.required
+                            ? "destructive"
+                            : "secondary"
+                        }
+                        className="text-[9px] h-4 px-1.5 shrink-0"
+                      >
+                        {isVerified
+                          ? "Verified ✓"
+                          : isRejected
+                          ? "Action Required"
+                          : isPending
+                          ? "Under Review"
+                          : req.required
+                          ? "Required"
+                          : "Optional"}
+                      </Badge>
+                    </div>
+
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      {req.description}
+                    </p>
+
+                    {matchingDoc && (
+                      <div className="rounded-md bg-background/80 p-2 border space-y-1">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="font-mono text-muted-foreground truncate max-w-[180px]">
+                            {matchingDoc.name}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {new Date(matchingDoc.uploadedAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        {matchingDoc.remarks && (
+                          <p className="text-[10px] text-destructive italic">
+                            Broker note: {matchingDoc.remarks}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-2 pt-2 border-t">
+                    {matchingDoc?.fileUrl ? (
+                      <a
+                        href={matchingDoc.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1"
+                      >
+                        <Eye className="h-3 w-3" />
+                        View File
+                      </a>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground italic">
+                        Not uploaded yet
+                      </span>
+                    )}
+
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        disabled={isUploadingThis}
+                        onChange={(e) => handleKycFileUpload(req, e)}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={matchingDoc ? "outline" : "default"}
+                        className="h-7 text-xs gap-1 pointer-events-none"
+                        disabled={isUploadingThis}
+                      >
+                        {isUploadingThis ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            <span>Uploading...</span>
+                          </>
+                        ) : matchingDoc ? (
+                          <>
+                            <RefreshCw className="h-3 w-3" />
+                            <span>Replace</span>
+                          </>
+                        ) : (
+                          <>
+                            <UploadCloud className="h-3 w-3" />
+                            <span>Upload</span>
+                          </>
+                        )}
+                      </Button>
+                    </label>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-2 rounded-lg bg-muted/40 p-2.5 text-[11px] text-muted-foreground">
+            <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
+            <span>
+              Bank-grade 256-bit encrypted KYC vault. Uploaded documents are transmitted only to your accredited licensed broker and developer compliance officer for unit purchase processing.
+            </span>
           </div>
         </CardContent>
       </Card>

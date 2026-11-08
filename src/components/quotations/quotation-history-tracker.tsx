@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Eye,
   FileSpreadsheet,
+  FileText,
   GitFork,
   History,
   Plus,
@@ -550,6 +551,20 @@ export function QuotationHistoryTracker({
                         <Download className="h-3 w-3" />
                         PDF
                       </Button>
+
+                      {q.pdfUrl && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-1.5 text-[11px] text-primary hover:text-primary"
+                          asChild
+                          title="Direct Cloud PDF Link"
+                        >
+                          <a href={q.pdfUrl} target="_blank" rel="noopener noreferrer">
+                            <FileText className="h-3 w-3" />
+                          </a>
+                        </Button>
+                      )}
 
                       <Button
                         variant="ghost"

@@ -62,16 +62,72 @@ export const BuyerDocumentSchema = z.object({
     "GOVERNMENT_ID",
     "TIN_ID",
     "PROOF_OF_INCOME",
+    "PROOF_OF_BILLING",
     "BIRTH_OR_MARRIAGE_CERT",
     "RESERVATION_FORM",
     "OTHER",
   ]),
-  fileUrl: z.string().url("Valid document URL is required"),
+  fileUrl: z.string().min(1, "Valid document URL is required"),
   verified: z.boolean().default(false),
+  status: z.enum(["PENDING", "VERIFIED", "REJECTED"]).default("PENDING"),
+  remarks: z.string().optional(),
   uploadedAt: z.coerce.date(),
 });
 
 export type BuyerDocument = z.infer<typeof BuyerDocumentSchema>;
+
+export interface DocumentRequirementDefinition {
+  type: BuyerDocument["type"];
+  code: string;
+  label: string;
+  description: string;
+  required: boolean;
+}
+
+export const STANDARD_KYC_REQUIREMENTS: DocumentRequirementDefinition[] = [
+  {
+    type: "GOVERNMENT_ID",
+    code: "GOV_ID_PRIMARY",
+    label: "Primary Government-Issued ID",
+    description: "Passport, Driver's License, UMID, or PRC ID (Front & Back)",
+    required: true,
+  },
+  {
+    type: "TIN_ID",
+    code: "TIN_PROOF",
+    label: "Tax Identification Number (TIN)",
+    description: "BIR TIN Card, BIR 1904 form, or verified verification slip",
+    required: true,
+  },
+  {
+    type: "PROOF_OF_INCOME",
+    code: "PROOF_OF_INCOME",
+    label: "Proof of Income",
+    description: "Latest 3 months payslips, COEC, or Remittance Receipts (OFW)",
+    required: true,
+  },
+  {
+    type: "PROOF_OF_BILLING",
+    code: "PROOF_OF_BILLING",
+    label: "Proof of Billing Address",
+    description: "Utility bill (Meralco, Maynilad, Telecom, or Credit Card statement)",
+    required: true,
+  },
+  {
+    type: "BIRTH_OR_MARRIAGE_CERT",
+    code: "CIVIL_STATUS_CERT",
+    label: "PSA Marriage / Birth Certificate",
+    description: "PSA Marriage Contract (if married) or PSA Birth Certificate",
+    required: false,
+  },
+  {
+    type: "RESERVATION_FORM",
+    code: "RESERVATION_AGREEMENT",
+    label: "Signed Buyer Information Sheet & Reservation Agreement",
+    description: "E-signed developer reservation agreement with terms conformity",
+    required: true,
+  },
+];
 
 /**
  * Lead Interaction / Timeline Activity Log

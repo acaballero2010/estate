@@ -8,7 +8,7 @@ import { firebaseStorage } from "@/lib/firebase/config";
  */
 export async function uploadMediaFile(
   file: File,
-  folder: "properties" | "receipts" | "walkthroughs"
+  folder: "properties" | "receipts" | "walkthroughs" | "quotations" | "kyc"
 ): Promise<string> {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storagePath = `${folder}/${Date.now()}_${safeName}`;
@@ -28,9 +28,12 @@ export async function uploadMediaFile(
     const downloadUrl = await getDownloadURL(snapshot.ref);
     return downloadUrl;
   } catch {
-    // Fallback: for images under 1.5MB convert to Data URL so it persists in Firestore/state;
-    // for larger files or videos use URL.createObjectURL
-    if (file.type.startsWith("image/") && file.size <= 1_500_000) {
+    // Fallback: for images or PDFs under 2MB convert to Data URL so it persists in Firestore/state;
+    // for larger files use URL.createObjectURL
+    if (
+      (file.type.startsWith("image/") || file.type === "application/pdf") &&
+      file.size <= 2_000_000
+    ) {
       return await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result));

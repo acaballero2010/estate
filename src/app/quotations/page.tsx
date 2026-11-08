@@ -29,7 +29,10 @@ import {
   QuotationCalculationInputSchema,
   type QuotationCalculationInput,
 } from "@/lib/schemas";
-import { downloadQuotationPdf } from "@/components/quotations/quotation-pdf-document";
+import {
+  downloadQuotationPdf,
+  generateAndUploadQuotationPdf,
+} from "@/components/quotations/quotation-pdf-document";
 import { QuotationHistoryTracker } from "@/components/quotations/quotation-history-tracker";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { useCrmStore } from "@/lib/store/crm-store";
@@ -241,6 +244,23 @@ function QuotationCalculatorContent() {
 
     saveQuotation(newQuotation);
 
+    // Asynchronously upload official PDF to Cloud Storage in background
+    void (async () => {
+      try {
+        const uploadedPdfUrl = await generateAndUploadQuotationPdf({
+          referenceNumber: refNo,
+          buyerName: `${selectedLead.firstName} ${selectedLead.lastName}`,
+          agentName: agentProfile?.fullName,
+          agentLicense: agentProfile?.prcLicenseNumber,
+          input: watchedValues,
+          result,
+        });
+        saveQuotation({ ...newQuotation, pdfUrl: uploadedPdfUrl });
+      } catch (err) {
+        console.warn("Background PDF upload warning:", err);
+      }
+    })();
+
     const equitySummaryText =
       watchedValues.isStepUpEquity && result.downPaymentSchedule[0]
         ? `Starts at ${formatCurrency(result.downPaymentSchedule[0].amountDue)} (Step-Up Yr 1)`
@@ -304,6 +324,23 @@ function QuotationCalculatorContent() {
     };
 
     saveQuotation(newQuotation);
+
+    // Asynchronously upload official PDF to Cloud Storage in background
+    void (async () => {
+      try {
+        const uploadedPdfUrl = await generateAndUploadQuotationPdf({
+          referenceNumber: refNo,
+          buyerName: `${selectedLead.firstName} ${selectedLead.lastName}`,
+          agentName: agentProfile?.fullName,
+          agentLicense: agentProfile?.prcLicenseNumber,
+          input: watchedValues,
+          result,
+        });
+        saveQuotation({ ...newQuotation, pdfUrl: uploadedPdfUrl });
+      } catch (err) {
+        console.warn("Background PDF upload warning:", err);
+      }
+    })();
     toast.success(`Saved quotation draft ${refNo}!`);
     setRevisingQuotation(null);
     setActiveMainTab("TRACKER");

@@ -7,10 +7,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import Papa from "papaparse";
 import {
+  AlertCircle,
   Calculator,
+  Check,
   CheckCircle2,
+  Clock,
+  Copy,
   Download,
   ExternalLink,
+  Eye,
   FileSpreadsheet,
   FileText,
   Filter,
@@ -21,24 +26,34 @@ import {
   LayoutList,
   Loader2,
   MapPin,
+  MessageCircle,
   MessageSquare,
   MoreHorizontal,
   Plus,
+  RefreshCw,
   Search,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  TrendingUp,
   Upload,
+  UploadCloud,
   UserPlus,
   Wallet,
-  Sparkles,
-  TrendingUp,
+  X,
   Zap,
 } from "lucide-react";
 import {
   CreateLeadInputSchema,
+  STANDARD_KYC_REQUIREMENTS,
+  type BuyerDocument,
   type CreateLeadInput,
   type Lead,
   type PipelineStage,
   PIPELINE_STAGE_LABELS,
 } from "@/lib/schemas";
+import { uploadMediaFile } from "@/lib/firebase/storage-upload";
 import {
   calculateLeadReadiness,
   type LeadReadinessAnalysis,
@@ -117,6 +132,9 @@ export default function PipelinePage() {
     addLead,
     bulkAddLeads,
     addLeadNote,
+    addLeadDocument,
+    updateLeadDocumentStatus,
+    deleteLeadDocument,
   } = useCrmStore();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [priorityFilter, setPriorityFilter] = React.useState<string>("ALL");
@@ -161,6 +179,115 @@ export default function PipelinePage() {
       calculateLeadReadiness(selectedLead, properties, quotations)
     );
   }, [selectedLead, leadReadinessMap, properties, quotations]);
+
+  // Document KYC Tracker State for Selected Lead
+  const [uploadingDocType, setUploadingDocType] = React.useState<string | null>(null);
+  const [rejectingDocId, setRejectingDocId] = React.useState<string | null>(null);
+  const [rejectReasonDraft, setRejectReasonDraft] = React.useState<string>("");
+  const [isRequestModalOpen, setIsRequestModalOpen] = React.useState(false);
+
+  const selectedLeadKyc = React.useMemo(() => {
+    if (!selectedLead) return null;
+    const docs = selectedLead.documents ?? [];
+    const requiredList = STANDARD_KYC_REQUIREMENTS.filter((r) => r.required);
+    const missingRequired = requiredList.filter(
+      (r) => !docs.some((d) => d.type === r.type && (d.verified || d.status === "VERIFIED"))
+    );
+    const verifiedCount = requiredList.filter((r) =>
+      docs.some((d) => d.type === r.type && (d.verified || d.status === "VERIFIED"))
+    ).length;
+    const uploadedCount = requiredList.filter((r) =>
+      docs.some((d) => d.type === r.type)
+    ).length;
+    const progressPct = Math.round(
+      (verifiedCount / (requiredList.length || 1)) * 100
+    );
+
+    const matchingQuote = leadQuotations[0];
+    const portalUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/quote/${matchingQuote?.shareToken || "portal"}?leadId=${selectedLead.id}`
+        : `https://propflow.ph/quote/portal?leadId=${selectedLead.id}`;
+
+    const missingListText = missingRequired
+      .map((r, i) => `${i + 1}. ${r.label} — ${r.description}`)
+      .join("\n");
+
+    const followUpMessage = `Hi ${selectedLead.firstName}! Good day.
+
+To facilitate your buyer accreditation and reservation file${
+      matchingQuote
+        ? ` for ${matchingQuote.calculationInput.projectName} (${matchingQuote.calculationInput.unitCode})`
+        : ""
+    }, our compliance team needs the following remaining documentary requirement${
+      missingRequired.length > 1 ? "s" : ""
+    }:
+
+${missingListText}
+
+You can snap a photo or upload your files securely directly via your personal link:
+👉 ${portalUrl}
+
+Please let me know once uploaded so we can verify them promptly. Thank you!`;
+
+    return {
+      docs,
+      requiredList,
+      missingRequired,
+      verifiedCount,
+      uploadedCount,
+      progressPct,
+      portalUrl,
+      followUpMessage,
+    };
+  }, [selectedLead, leadQuotations]);
+
+  const handleAgentUploadDoc = async (
+    type: BuyerDocument["type"],
+    file: File,
+    customName?: string
+  ) => {
+    if (!selectedLead) return;
+    setUploadingDocType(type);
+    try {
+      const fileUrl = await uploadMediaFile(file, "kyc");
+      addLeadDocument(selectedLead.id, {
+        name: customName || file.name,
+        type,
+        fileUrl,
+        verified: true,
+      });
+      toast.success(`Uploaded & verified ${customName || file.name}`);
+    } catch (err) {
+      console.error("Failed to upload KYC doc:", err);
+      toast.error("Failed to upload document. Please try again.");
+    } finally {
+      setUploadingDocType(null);
+    }
+  };
+
+  const handleVerifyDocument = (docId: string) => {
+    if (!selectedLead) return;
+    updateLeadDocumentStatus(selectedLead.id, docId, "VERIFIED");
+    toast.success("Document verified & approved ✓");
+  };
+
+  const handleConfirmReject = (docId: string) => {
+    if (!selectedLead) return;
+    const remarks =
+      rejectReasonDraft.trim() ||
+      "Document did not pass verification criteria. Please provide a clear, valid copy.";
+    updateLeadDocumentStatus(selectedLead.id, docId, "REJECTED", remarks);
+    toast.error("Document marked as Rejected. Status updated for client.");
+    setRejectingDocId(null);
+    setRejectReasonDraft("");
+  };
+
+  const handleDeleteDocument = (docId: string) => {
+    if (!selectedLead) return;
+    deleteLeadDocument(selectedLead.id, docId);
+    toast.success("Document removed.");
+  };
 
   // Filter leads
   const filteredLeads = React.useMemo(() => {
@@ -867,14 +994,63 @@ export default function PipelinePage() {
                             >
                               {lead.financingPreference}
                             </Badge>
-                            {lead.documents.length > 0 && (
-                              <Badge
-                                variant="secondary"
-                                className="h-4 px-1.5 text-[9px]"
-                              >
-                                {lead.documents.length} KYC
-                              </Badge>
-                            )}
+                            {(() => {
+                              const requiredKyc = STANDARD_KYC_REQUIREMENTS.filter(
+                                (r) => r.required
+                              );
+                              const verifiedCount = requiredKyc.filter((r) =>
+                                lead.documents.some(
+                                  (d) =>
+                                    d.type === r.type &&
+                                    (d.verified || d.status === "VERIFIED")
+                                )
+                              ).length;
+                              const uploadedCount = requiredKyc.filter((r) =>
+                                lead.documents.some((d) => d.type === r.type)
+                              ).length;
+
+                              if (
+                                verifiedCount === requiredKyc.length &&
+                                requiredKyc.length > 0
+                              ) {
+                                return (
+                                  <Badge
+                                    variant="won"
+                                    className="h-4 px-1.5 text-[9px] gap-0.5"
+                                    title="All required KYC documents verified"
+                                  >
+                                    <CheckCircle2 className="h-2.5 w-2.5" />
+                                    KYC Complete
+                                  </Badge>
+                                );
+                              }
+                              if (uploadedCount > 0) {
+                                return (
+                                  <Badge
+                                    variant="outline"
+                                    className="h-4 px-1.5 text-[9px] gap-0.5 border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                                    title={`${uploadedCount} of ${requiredKyc.length} required KYC documents submitted`}
+                                  >
+                                    KYC {uploadedCount}/{requiredKyc.length}
+                                  </Badge>
+                                );
+                              }
+                              if (
+                                lead.stage === "PROPOSAL_SENT" ||
+                                lead.stage === "RESERVATION"
+                              ) {
+                                return (
+                                  <Badge
+                                    variant="outline"
+                                    className="h-4 px-1.5 text-[9px] gap-0.5 border-rose-500/40 text-rose-700 dark:text-rose-400 bg-rose-500/10"
+                                    title="No KYC documents uploaded yet"
+                                  >
+                                    KYC Missing
+                                  </Badge>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                           <div
                             className="flex items-center gap-1"
@@ -990,9 +1166,50 @@ export default function PipelinePage() {
                       {lead.preferredLocations.join(", ")}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
-                      <Badge variant="outline" className="text-[10px]">
-                        {lead.financingPreference}
-                      </Badge>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-[10px]">
+                          {lead.financingPreference}
+                        </Badge>
+                        {(() => {
+                          const requiredKyc = STANDARD_KYC_REQUIREMENTS.filter(
+                            (r) => r.required
+                          );
+                          const verifiedCount = requiredKyc.filter((r) =>
+                            lead.documents.some(
+                              (d) =>
+                                d.type === r.type &&
+                                (d.verified || d.status === "VERIFIED")
+                            )
+                          ).length;
+                          const uploadedCount = requiredKyc.filter((r) =>
+                            lead.documents.some((d) => d.type === r.type)
+                          ).length;
+                          if (
+                            verifiedCount === requiredKyc.length &&
+                            requiredKyc.length > 0
+                          ) {
+                            return (
+                              <Badge
+                                variant="won"
+                                className="text-[9px] h-4 px-1"
+                              >
+                                KYC ✓
+                              </Badge>
+                            );
+                          }
+                          if (uploadedCount > 0) {
+                            return (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] h-4 px-1 border-amber-500/40 text-amber-700 bg-amber-500/10"
+                              >
+                                KYC {uploadedCount}/{requiredKyc.length}
+                              </Badge>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                     </TableCell>
                     <TableCell
                       className="text-right"
@@ -1362,41 +1579,463 @@ export default function PipelinePage() {
                 </div>
               </div>
 
-              {/* Uploaded Buyer Identity / KYC Documents */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Uploaded Buyer KYC & Reservation Docs</Label>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {selectedLead.documents.length} Files
-                  </Badge>
-                </div>
-                {selectedLead.documents.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-                    No buyer identity documents uploaded yet.
+              {/* Documentary Requirements & KYC Verification Manager */}
+              <div className="space-y-3 rounded-xl border bg-muted/10 p-3.5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <ShieldCheck className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-bold flex items-center gap-1.5">
+                        Documentary Requirements &amp; KYC
+                        <Badge
+                          variant={
+                            selectedLeadKyc?.progressPct === 100
+                              ? "won"
+                              : selectedLeadKyc?.uploadedCount && selectedLeadKyc.uploadedCount > 0
+                              ? "secondary"
+                              : "destructive"
+                          }
+                          className="text-[9px] h-4 px-1.5"
+                        >
+                          {selectedLeadKyc?.progressPct === 100
+                            ? "Complete ✓"
+                            : `${selectedLeadKyc?.verifiedCount || 0}/${
+                                selectedLeadKyc?.requiredList.length || 0
+                              } Verified`}
+                        </Badge>
+                      </Label>
+                      <p className="text-[10px] text-muted-foreground">
+                        Track missing KYC documents and 1-click dispatch reminders
+                      </p>
+                    </div>
                   </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {selectedLead.documents.map((doc) => (
+
+                  {selectedLeadKyc && selectedLeadKyc.missingRequired.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground"
+                      onClick={() => setIsRequestModalOpen(!isRequestModalOpen)}
+                    >
+                      <MessageCircle className="h-3 w-3" />
+                      {isRequestModalOpen
+                        ? "Hide Message"
+                        : `Request Missing (${selectedLeadKyc.missingRequired.length})`}
+                    </Button>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                {selectedLeadKyc && (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-muted-foreground">
+                        {selectedLeadKyc.verifiedCount} of {selectedLeadKyc.requiredList.length} Required Verified ({selectedLeadKyc.progressPct}%)
+                      </span>
+                      {selectedLeadKyc.missingRequired.length > 0 ? (
+                        <span className="text-amber-700 dark:text-amber-400 font-semibold">
+                          Missing {selectedLeadKyc.missingRequired.length} items
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                          All requirements verified ✓
+                        </span>
+                      )}
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                       <div
-                        key={doc.id}
-                        className="flex items-center justify-between rounded-md border p-2 text-xs"
+                        className={cn(
+                          "h-full transition-all duration-300",
+                          selectedLeadKyc.progressPct === 100
+                            ? "bg-emerald-600"
+                            : selectedLeadKyc.progressPct > 0
+                            ? "bg-amber-500"
+                            : "bg-destructive"
+                        )}
+                        style={{ width: `${selectedLeadKyc.progressPct}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 1-Click Request Missing Requirements Dispatcher Box */}
+                {isRequestModalOpen && selectedLeadKyc && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2.5 animate-in fade-in-50">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-primary flex items-center gap-1.5">
+                        <Send className="h-3.5 w-3.5" />
+                        Automated Client Follow-up Dispatcher
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5"
+                        onClick={() => setIsRequestModalOpen(false)}
                       >
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-primary" />
-                          <div>
-                            <p className="font-medium">{doc.name}</p>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+
+                    <div className="text-[11px] text-muted-foreground bg-background/80 p-2.5 rounded-md border whitespace-pre-line font-sans max-h-48 overflow-y-auto">
+                      {selectedLeadKyc.followUpMessage}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => {
+                          navigator.clipboard.writeText(selectedLeadKyc.followUpMessage);
+                          toast.success("Follow-up message copied to clipboard!");
+                        }}
+                      >
+                        <Copy className="h-3 w-3" />
+                        Copy Message &amp; Portal Link
+                      </Button>
+
+                      {selectedLead.phone && (
+                        <a
+                          href={`https://wa.me/${selectedLead.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(selectedLeadKyc.followUpMessage)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10">
+                            <MessageCircle className="h-3 w-3 text-emerald-600" />
+                            Send via WhatsApp
+                          </Button>
+                        </a>
+                      )}
+
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1" asChild>
+                        <Link href={`/inbox?leadId=${selectedLead.id}`}>
+                          <MessageSquare className="h-3 w-3 text-primary" />
+                          Send in Messenger Hub
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Requirements Checklist */}
+                <div className="space-y-2 pt-1">
+                  {STANDARD_KYC_REQUIREMENTS.map((req) => {
+                    const existingDoc = selectedLead.documents.find(
+                      (d) => d.type === req.type
+                    );
+                    const isVerified = existingDoc?.status === "VERIFIED" || existingDoc?.verified;
+                    const isRejected = existingDoc?.status === "REJECTED";
+                    const isPending = !!existingDoc && !isVerified && !isRejected;
+                    const isUploadingThis = uploadingDocType === req.type;
+                    const isRejectingThis = rejectingDocId === existingDoc?.id;
+
+                    return (
+                      <div
+                        key={req.code}
+                        className={cn(
+                          "rounded-lg border p-2.5 text-xs transition-colors space-y-2",
+                          isVerified
+                            ? "border-emerald-500/30 bg-emerald-500/5"
+                            : isRejected
+                            ? "border-destructive/30 bg-destructive/5"
+                            : isPending
+                            ? "border-amber-500/30 bg-amber-500/5"
+                            : "border-border bg-card"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                              {isVerified ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              ) : isRejected ? (
+                                <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                              ) : isPending ? (
+                                <Clock className="h-3.5 w-3.5 text-amber-600" />
+                              ) : (
+                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                              )}
+                              <span>{req.label}</span>
+                            </div>
                             <p className="text-[10px] text-muted-foreground">
-                              {doc.type.replace(/_/g, " ")}
+                              {req.description}
                             </p>
                           </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Badge
+                              variant={
+                                isVerified
+                                  ? "won"
+                                  : isRejected
+                                  ? "destructive"
+                                  : isPending
+                                  ? "outline"
+                                  : req.required
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-[9px] h-4 px-1.5"
+                            >
+                              {isVerified
+                                ? "Verified ✓"
+                                : isRejected
+                                ? "Rejected"
+                                : isPending
+                                ? "Needs Review"
+                                : req.required
+                                ? "Missing"
+                                : "Optional"}
+                            </Badge>
+                          </div>
                         </div>
-                        {doc.verified && (
-                          <Badge variant="won" className="gap-1 text-[10px]">
-                            <CheckCircle2 className="h-3 w-3" /> Verified
-                          </Badge>
+
+                        {/* Existing Document Info & Actions */}
+                        {existingDoc ? (
+                          <div className="rounded-md border bg-background/80 p-2 space-y-1.5">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <div className="flex items-center gap-1.5 truncate max-w-[220px]">
+                                <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                                <span className="truncate font-mono font-medium">
+                                  {existingDoc.name}
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground">
+                                {new Date(existingDoc.uploadedAt).toLocaleDateString()}
+                              </span>
+                            </div>
+
+                            {existingDoc.remarks && (
+                              <p className="text-[10px] text-destructive italic">
+                                Note: {existingDoc.remarks}
+                              </p>
+                            )}
+
+                            <div className="flex flex-wrap items-center justify-between gap-1.5 pt-1 border-t">
+                              <a
+                                href={existingDoc.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] font-semibold text-primary hover:underline flex items-center gap-1"
+                              >
+                                <Eye className="h-3 w-3" />
+                                View Document
+                              </a>
+
+                              <div className="flex items-center gap-1">
+                                {!isVerified && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 px-2 text-[10px] gap-1 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10"
+                                    onClick={() => handleVerifyDocument(existingDoc.id)}
+                                  >
+                                    <Check className="h-2.5 w-2.5" />
+                                    Verify
+                                  </Button>
+                                )}
+
+                                {!isRejected && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 px-2 text-[10px] gap-1 border-destructive/30 text-destructive hover:bg-destructive/10"
+                                    onClick={() => {
+                                      setRejectingDocId(
+                                        rejectingDocId === existingDoc.id ? null : existingDoc.id
+                                      );
+                                      setRejectReasonDraft("");
+                                    }}
+                                  >
+                                    <X className="h-2.5 w-2.5" />
+                                    Reject
+                                  </Button>
+                                )}
+
+                                <label className="cursor-pointer">
+                                  <input
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    className="hidden"
+                                    disabled={isUploadingThis}
+                                    onChange={(e) => {
+                                      const f = e.target.files?.[0];
+                                      if (f) handleAgentUploadDoc(req.type, f);
+                                      e.target.value = "";
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 px-2 text-[10px] gap-1 pointer-events-none"
+                                    disabled={isUploadingThis}
+                                  >
+                                    {isUploadingThis ? (
+                                      <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                    ) : (
+                                      <RefreshCw className="h-2.5 w-2.5" />
+                                    )}
+                                    Replace
+                                  </Button>
+                                </label>
+
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                  onClick={() => handleDeleteDocument(existingDoc.id)}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            {/* Rejection Remarks Form */}
+                            {isRejectingThis && (
+                              <div className="mt-2 space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-2">
+                                <Label className="text-[10px] font-semibold text-destructive">
+                                  Reason for Rejection (Visible to Client):
+                                </Label>
+                                <Input
+                                  value={rejectReasonDraft}
+                                  onChange={(e) => setRejectReasonDraft(e.target.value)}
+                                  placeholder="e.g. Photo blurry / ID expired / Missing back page"
+                                  className="h-7 text-xs bg-background"
+                                />
+                                <div className="flex flex-wrap gap-1">
+                                  {[
+                                    "Blurry copy",
+                                    "Expired ID",
+                                    "Need front & back",
+                                    "Outdated payslip (>3 mos)",
+                                  ].map((preset) => (
+                                    <button
+                                      key={preset}
+                                      type="button"
+                                      onClick={() => setRejectReasonDraft(preset)}
+                                      className="rounded bg-background px-1.5 py-0.5 text-[9px] border hover:border-primary text-muted-foreground"
+                                    >
+                                      {preset}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="flex justify-end gap-1.5 pt-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 px-2 text-[10px]"
+                                    onClick={() => setRejectingDocId(null)}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-6 px-2 text-[10px]"
+                                    onClick={() => handleConfirmReject(existingDoc.id)}
+                                  >
+                                    Confirm Rejection
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* Missing Doc - Upload on Behalf Button */
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-[10px] text-muted-foreground italic">
+                              Client has not submitted this yet.
+                            </span>
+                            <label className="cursor-pointer">
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                className="hidden"
+                                disabled={isUploadingThis}
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) handleAgentUploadDoc(req.type, f);
+                                  e.target.value = "";
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[10px] gap-1 pointer-events-none"
+                                disabled={isUploadingThis}
+                              >
+                                {isUploadingThis ? (
+                                  <>
+                                    <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                    <span>Uploading...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UploadCloud className="h-2.5 w-2.5" />
+                                    <span>Upload on Client&apos;s Behalf</span>
+                                  </>
+                                )}
+                              </Button>
+                            </label>
+                          </div>
                         )}
                       </div>
-                    ))}
+                    );
+                  })}
+                </div>
+
+                {/* Additional Custom Buyer Documents (e.g. SPA, Bank Form) */}
+                {selectedLead.documents.some(
+                  (d) => !STANDARD_KYC_REQUIREMENTS.some((r) => r.type === d.type)
+                ) && (
+                  <div className="space-y-1.5 pt-2 border-t">
+                    <Label className="text-[11px] font-semibold text-muted-foreground">
+                      Additional Uploaded Documents:
+                    </Label>
+                    {selectedLead.documents
+                      .filter(
+                        (d) => !STANDARD_KYC_REQUIREMENTS.some((r) => r.type === d.type)
+                      )
+                      .map((doc) => (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between rounded-md border bg-card p-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2 truncate max-w-[200px]">
+                            <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <div className="truncate">
+                              <p className="font-medium truncate">{doc.name}</p>
+                              <p className="text-[9px] text-muted-foreground">
+                                {doc.type.replace(/_/g, " ")}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <a
+                              href={doc.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1">
+                                <Eye className="h-2.5 w-2.5" />
+                                View
+                              </Button>
+                            </a>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleDeleteDocument(doc.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 )}
               </div>

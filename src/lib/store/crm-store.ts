@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   Lead,
+  BuyerDocument,
   PipelineStage,
   Property,
   CreatePropertyInput,
@@ -199,6 +200,7 @@ export const INITIAL_LEADS: Lead[] = [
         type: "GOVERNMENT_ID",
         fileUrl: "https://example.com/docs/passport-soriano.pdf",
         verified: true,
+        status: "VERIFIED",
         uploadedAt: new Date("2026-11-05T10:15:00Z"),
       },
     ],
@@ -258,6 +260,7 @@ export const INITIAL_LEADS: Lead[] = [
         type: "GOVERNMENT_ID",
         fileUrl: "https://example.com/docs/dl-chua.pdf",
         verified: true,
+        status: "VERIFIED",
         uploadedAt: new Date("2026-11-04T09:00:00Z"),
       },
       {
@@ -266,6 +269,7 @@ export const INITIAL_LEADS: Lead[] = [
         type: "PROOF_OF_INCOME",
         fileUrl: "https://example.com/docs/itr-chua.pdf",
         verified: true,
+        status: "VERIFIED",
         uploadedAt: new Date("2026-11-05T14:30:00Z"),
       },
     ],
@@ -324,6 +328,7 @@ export const INITIAL_LEADS: Lead[] = [
         type: "RESERVATION_FORM",
         fileUrl: "https://example.com/docs/ra-tan.pdf",
         verified: true,
+        status: "VERIFIED",
         uploadedAt: new Date("2026-11-06T17:00:00Z"),
       },
     ],
@@ -823,6 +828,22 @@ interface CrmState {
   ) => void;
   saveQuotation: (quotation: Quotation) => void;
   updateQuotationStatus: (quotationId: string, status: Quotation["status"]) => void;
+  addLeadDocument: (
+    leadId: string,
+    doc: {
+      name: string;
+      type: BuyerDocument["type"];
+      fileUrl: string;
+      verified?: boolean;
+    }
+  ) => BuyerDocument;
+  updateLeadDocumentStatus: (
+    leadId: string,
+    documentId: string,
+    status: "PENDING" | "VERIFIED" | "REJECTED",
+    remarks?: string
+  ) => void;
+  deleteLeadDocument: (leadId: string, documentId: string) => void;
   toggleDealRequirementStatus: (dealId: string, requirementId: string) => void;
   createDealFromReservation: (params: {
     leadId: string;
@@ -1243,6 +1264,88 @@ export const useCrmStore = create<CrmState>((set, get) => ({
     }
   },
 
+  addLeadDocument: (leadId, input) => {
+    const newDoc: BuyerDocument = {
+      id: crypto.randomUUID(),
+      name: input.name,
+      type: input.type,
+      fileUrl: input.fileUrl,
+      verified: Boolean(input.verified),
+      status: input.verified ? "VERIFIED" : "PENDING",
+      uploadedAt: new Date(),
+    };
+
+    set((state) => ({
+      leads: state.leads.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              documents: [
+                newDoc,
+                ...l.documents.filter(
+                  (d) => d.type !== input.type || d.id === newDoc.id
+                ),
+              ],
+              updatedAt: new Date(),
+            }
+          : l
+      ),
+    }));
+
+    const updatedLead = get().leads.find((l) => l.id === leadId);
+    if (updatedLead) {
+      void persistAgentDocument(get().activeAgentUid, "leads", updatedLead);
+    }
+    return newDoc;
+  },
+
+  updateLeadDocumentStatus: (leadId, documentId, status, remarks) => {
+    set((state) => ({
+      leads: state.leads.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              documents: l.documents.map((d) =>
+                d.id === documentId
+                  ? {
+                      ...d,
+                      status,
+                      verified: status === "VERIFIED",
+                      remarks: remarks !== undefined ? remarks : d.remarks,
+                    }
+                  : d
+              ),
+              updatedAt: new Date(),
+            }
+          : l
+      ),
+    }));
+
+    const updatedLead = get().leads.find((l) => l.id === leadId);
+    if (updatedLead) {
+      void persistAgentDocument(get().activeAgentUid, "leads", updatedLead);
+    }
+  },
+
+  deleteLeadDocument: (leadId, documentId) => {
+    set((state) => ({
+      leads: state.leads.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              documents: l.documents.filter((d) => d.id !== documentId),
+              updatedAt: new Date(),
+            }
+          : l
+      ),
+    }));
+
+    const updatedLead = get().leads.find((l) => l.id === leadId);
+    if (updatedLead) {
+      void persistAgentDocument(get().activeAgentUid, "leads", updatedLead);
+    }
+  },
+
   toggleDealRequirementStatus: (dealId, requirementId) => {
     set((state) => ({
       deals: state.deals.map((deal) => {
@@ -1403,6 +1506,7 @@ export const useCrmStore = create<CrmState>((set, get) => ({
                   fileUrl:
                     params.signatureDataUrl || params.receiptImageUrl || "https://example.com/ra.png",
                   verified: true,
+                  status: "VERIFIED" as const,
                   uploadedAt: new Date(),
                 },
               ],
