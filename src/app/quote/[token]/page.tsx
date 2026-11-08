@@ -25,6 +25,7 @@ import {
   type QuotationCalculationInput,
 } from "@/lib/schemas";
 import { downloadQuotationPdf } from "@/components/quotations/quotation-pdf-document";
+import { downloadReservationAgreementPdf } from "@/components/deals/reservation-agreement-pdf";
 import { uploadMediaFile } from "@/lib/firebase/storage-upload";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { useAuth } from "@/lib/firebase/auth-context";
@@ -69,6 +70,7 @@ function BuyerQuotationPortalContent() {
     quotations,
     leads,
     properties,
+    deals,
     moveLeadStage,
     sendMessage,
     createDealFromReservation,
@@ -138,6 +140,7 @@ function BuyerQuotationPortalContent() {
   const [createdDealNumber, setCreatedDealNumber] = React.useState<string | null>(
     null
   );
+  const [isGeneratingRaf, setIsGeneratingRaf] = React.useState(false);
   const [trippingRequested, setTrippingRequested] = React.useState(false);
 
   // Digital Reservation Modal State
@@ -309,6 +312,51 @@ function BuyerQuotationPortalContent() {
     toast.success("Showroom viewing request logged with your broker!");
   };
 
+  const matchingDeal = React.useMemo(() => {
+    if (createdDealNumber) {
+      return deals.find((d) => d.dealNumber === createdDealNumber) ?? null;
+    }
+    if (matchedQuotation?.id) {
+      return deals.find((d) => d.quotationId === matchedQuotation.id) ?? null;
+    }
+    return null;
+  }, [deals, createdDealNumber, matchedQuotation]);
+
+  const handleDownloadBuyerRaf = async () => {
+    if (!matchingDeal) {
+      toast.error("Deal record not found.");
+      return;
+    }
+    setIsGeneratingRaf(true);
+    try {
+      await downloadReservationAgreementPdf({
+        deal: matchingDeal,
+        buyerName: buyerLead
+          ? `${buyerLead.firstName} ${buyerLead.lastName}`
+          : "Valued Buyer",
+        buyerEmail: buyerLead?.email,
+        buyerPhone: buyerLead?.phone,
+        buyerAddress: buyerLead?.notes,
+        projectName: liveInput.projectName,
+        unitCode: liveInput.unitCode,
+        floorAreaSqm: liveInput.floorAreaSqm,
+        lotAreaSqm: liveInput.lotAreaSqm,
+        agentName: agentProfile?.fullName || "Licensed Sales Consultant",
+        agentPrcLicense: agentProfile?.prcLicenseNumber || "PRC RESA #20891",
+        agentDhsudNumber: "DHSUD-NCR-AA-09821",
+        brokerName: "Atty. Maria Santos, REB",
+        brokerPrcLicense: "PRC REB #0019482",
+        brokerDhsudNumber: "DHSUD-NCR-B-04281",
+      });
+      toast.success("Official Reservation Agreement (RAF) downloaded!");
+    } catch (err) {
+      console.error("Failed to generate RAF PDF:", err);
+      toast.error("Failed to generate Reservation Agreement PDF.");
+    } finally {
+      setIsGeneratingRaf(false);
+    }
+  };
+
   const handleDownloadBuyerPdf = async () => {
     const refNo =
       matchedQuotation?.referenceNumber ||
@@ -398,22 +446,38 @@ function BuyerQuotationPortalContent() {
         </div>
       </div>
 
-      {createdDealNumber && (
-        <div className="flex flex-col justify-between gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 sm:flex-row sm:items-center">
+      {(createdDealNumber || matchingDeal) && (
+        <div className="flex flex-col justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2.5 text-xs">
             <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
             <div>
               <p className="font-bold text-foreground">
-                Digital Reservation Confirmed — Deal Room {createdDealNumber} Active
+                Digital Reservation Confirmed — Deal Room {createdDealNumber || matchingDeal?.dealNumber} Active
               </p>
               <p className="text-muted-foreground">
-                Your signed Reservation Agreement and payment proof ({referenceNo}) have been verified.
+                Official Philippine Reservation Agreement (RAF) has been executed and linked to your Deal Room.
               </p>
             </div>
           </div>
-          <Button size="sm" variant="default" className="h-8 text-xs" asChild>
-            <Link href="/deals">Open Deal Room →</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs gap-1.5 border-emerald-600/30 hover:bg-emerald-500/10"
+              onClick={handleDownloadBuyerRaf}
+              disabled={isGeneratingRaf}
+            >
+              {isGeneratingRaf ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FileSignature className="h-3.5 w-3.5 text-emerald-600" />
+              )}
+              Download RAF (PDF)
+            </Button>
+            <Button size="sm" variant="default" className="h-8 text-xs" asChild>
+              <Link href="/deals">Open Deal Room →</Link>
+            </Button>
+          </div>
         </div>
       )}
 
@@ -628,25 +692,31 @@ function BuyerQuotationPortalContent() {
                 : "Book Showroom / Site Tripping"}
             </Button>
 
-            <Button
-              size="lg"
-              className="w-full text-xs gap-2"
-              onClick={() => setIsReserveModalOpen(true)}
-              disabled={reservedConfirmed}
-            >
-              {reservedConfirmed ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4" />
-                  Unit Officially Reserved ({createdDealNumber})
-                </>
-              ) : (
-                <>
-                  <Lock className="h-4 w-4" />
-                  E-Sign & Reserve Unit (
-                  {formatCurrency(liveInput.reservationFee, "PHP", 0)})
-                </>
-              )}
-            </Button>
+            {reservedConfirmed || matchingDeal ? (
+              <Button
+                size="lg"
+                className="w-full text-xs gap-2 bg-emerald-700 hover:bg-emerald-800 text-white"
+                onClick={handleDownloadBuyerRaf}
+                disabled={isGeneratingRaf}
+              >
+                {isGeneratingRaf ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileSignature className="h-4 w-4" />
+                )}
+                Download Official Reservation Agreement (RAF) PDF
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                className="w-full text-xs gap-2"
+                onClick={() => setIsReserveModalOpen(true)}
+              >
+                <Lock className="h-4 w-4" />
+                E-Sign & Reserve Unit (
+                {formatCurrency(liveInput.reservationFee, "PHP", 0)})
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
