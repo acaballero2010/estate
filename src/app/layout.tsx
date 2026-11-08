@@ -1,8 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { Instrument_Serif, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import dynamic from "next/dynamic";
 import "./globals.css";
 import { Providers } from "@/components/providers";
-import { AppShell } from "@/components/layout/app-shell";
+
+const AppShell = dynamic(
+  () => import("@/components/layout/app-shell").then((mod) => mod.AppShell),
+  {
+    ssr: true,
+  }
+);
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
