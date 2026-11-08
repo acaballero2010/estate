@@ -14,6 +14,7 @@ import {
 import { computeDealCommissionMetrics } from "@/lib/schemas";
 import { downloadCommissionVoucherPdf } from "@/components/deals/commission-voucher-pdf";
 import { downloadReservationAgreementPdf } from "@/components/deals/reservation-agreement-pdf";
+import { downloadBir2307Pdf } from "@/components/deals/bir-2307-pdf";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -246,6 +247,38 @@ export default function DealsPage() {
                         <Download className="h-3 w-3 text-primary" />
                         Commission Voucher
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-[11px] gap-1.5"
+                        onClick={async () => {
+                          const primarySplit =
+                            deal.commissionSplits.find(
+                              (s) => s.role === "SELLING_AGENT"
+                            ) || deal.commissionSplits[0];
+
+                          if (!primarySplit) {
+                            toast.error("No commission split found for this deal.");
+                            return;
+                          }
+
+                          await downloadBir2307Pdf({
+                            deal,
+                            split: primarySplit,
+                            payorName: property?.developerName
+                              ? `${property.developerName} / PropFlow Realty`
+                              : "PropFlow Realty & Development Corp.",
+                            payeeTin: "482-192-831-000",
+                            payeeAddress: buyer?.notes || "Metro Manila, Philippines",
+                          });
+                          toast.success(
+                            `Downloaded BIR Form 2307 (Tax Withheld Certificate) for ${primarySplit.recipientName}`
+                          );
+                        }}
+                      >
+                        <Receipt className="h-3 w-3 text-primary" />
+                        BIR Form 2307 (Tax)
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -384,19 +417,43 @@ export default function DealsPage() {
                               {formatCurrency(split.releasedAmount)}
                             </TableCell>
                             <TableCell className="text-right">
-                              <Badge
-                                variant={
-                                  split.releaseStatus === "FULLY_RELEASED"
-                                    ? "won"
-                                    : split.releaseStatus ===
-                                      "PARTIALLY_RELEASED"
-                                    ? "proposal"
-                                    : "secondary"
-                                }
-                                className="text-[9px]"
-                              >
-                                {split.releaseStatus.replace(/_/g, " ")}
-                              </Badge>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Badge
+                                  variant={
+                                    split.releaseStatus === "FULLY_RELEASED"
+                                      ? "won"
+                                      : split.releaseStatus ===
+                                        "PARTIALLY_RELEASED"
+                                      ? "proposal"
+                                      : "secondary"
+                                  }
+                                  className="text-[9px]"
+                                >
+                                  {split.releaseStatus.replace(/_/g, " ")}
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 text-muted-foreground hover:text-primary"
+                                  title={`Download BIR Form 2307 for ${split.recipientName}`}
+                                  onClick={async () => {
+                                    await downloadBir2307Pdf({
+                                      deal,
+                                      split,
+                                      payorName: property?.developerName
+                                        ? `${property.developerName} / PropFlow Realty`
+                                        : "PropFlow Realty & Development Corp.",
+                                      payeeTin: "482-192-831-000",
+                                      payeeAddress: buyer?.notes || "Metro Manila, Philippines",
+                                    });
+                                    toast.success(
+                                      `Downloaded BIR 2307 for ${split.recipientName}`
+                                    );
+                                  }}
+                                >
+                                  <FileText className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
