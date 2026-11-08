@@ -64,6 +64,18 @@ const DEFAULT_FALLBACK_AGENT: AgentProfile = {
   agencyName: "PropFlow Realty Group",
 };
 
+function setSessionCookie(hasSession: boolean) {
+  if (typeof document !== "undefined") {
+    if (hasSession) {
+      document.cookie =
+        "propflow_auth_session=1; path=/; max-age=2592000; SameSite=Lax";
+    } else {
+      document.cookie =
+        "propflow_auth_session=; path=/; max-age=0; SameSite=Lax";
+    }
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<User | null>(null);
   const [agentProfile, setAgentProfile] = React.useState<AgentProfile | null>(
@@ -121,6 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       firebaseAuth,
       async (currentUser) => {
         setUser(currentUser);
+        setSessionCookie(Boolean(currentUser));
         if (currentUser) {
           const profile = await fetchOrCreateAgentProfile(currentUser);
           setAgentProfile(profile);
@@ -142,6 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       password
     );
+    setSessionCookie(true);
     const profile = await fetchOrCreateAgentProfile(credential.user);
     setAgentProfile(profile);
   };
@@ -152,6 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       payload.email,
       payload.password
     );
+    setSessionCookie(true);
 
     await updateProfile(credential.user, {
       displayName: payload.fullName,
@@ -181,11 +196,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = async () => {
     const credential = await signInWithPopup(firebaseAuth, googleAuthProvider);
+    setSessionCookie(true);
     const profile = await fetchOrCreateAgentProfile(credential.user);
     setAgentProfile(profile);
   };
 
   const signOut = async () => {
+    setSessionCookie(false);
     await firebaseSignOut(firebaseAuth);
     setUser(null);
     setAgentProfile(null);
@@ -195,7 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        agentProfile: agentProfile ?? DEFAULT_FALLBACK_AGENT,
+        agentProfile: agentProfile ?? (user ? DEFAULT_FALLBACK_AGENT : null),
         loading,
         signInWithEmail,
         registerAgent,

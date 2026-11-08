@@ -140,21 +140,36 @@ export async function loadOrSeedAgentFirestoreWorkspace(
   if (leadsSnap.empty) {
     const batch = writeBatch(firestoreDb);
 
-    for (const lead of defaults.leads) {
-      batch.set(doc(leadsCol, lead.id), toFirestorePayload(lead));
-    }
+    // Always seed accredited developer inventory properties
     for (const prop of defaults.properties) {
       batch.set(doc(propsCol, prop.id), toFirestorePayload(prop));
     }
-    for (const msg of defaults.messages) {
-      batch.set(doc(msgsCol, msg.id), toFirestorePayload(msg));
-    }
-    for (const deal of defaults.deals) {
-      batch.set(doc(dealsCol, deal.id), toFirestorePayload(deal));
+
+    // Only populate mock client records if explicitly running in a demo agent account
+    const isDemoAgent =
+      agentUid === "demo-agent-marco" || agentUid.startsWith("demo-");
+
+    if (isDemoAgent) {
+      for (const lead of defaults.leads) {
+        batch.set(doc(leadsCol, lead.id), toFirestorePayload(lead));
+      }
+      for (const msg of defaults.messages) {
+        batch.set(doc(msgsCol, msg.id), toFirestorePayload(msg));
+      }
+      for (const deal of defaults.deals) {
+        batch.set(doc(dealsCol, deal.id), toFirestorePayload(deal));
+      }
     }
 
     await batch.commit();
-    return defaults;
+
+    return {
+      leads: isDemoAgent ? defaults.leads : [],
+      properties: defaults.properties,
+      messages: isDemoAgent ? defaults.messages : [],
+      deals: isDemoAgent ? defaults.deals : [],
+      quotations: [],
+    };
   }
 
   const [propsSnap, msgsSnap, quotesSnap, dealsSnap] = await Promise.all([
@@ -179,7 +194,9 @@ export async function loadOrSeedAgentFirestoreWorkspace(
     hydrateQuotationDates(d.data() as Record<string, unknown>)
   );
   const deals = dealsSnap.empty
-    ? defaults.deals
+    ? agentUid.startsWith("demo")
+      ? defaults.deals
+      : []
     : dealsSnap.docs.map((d) =>
         hydrateDealDates(d.data() as Record<string, unknown>)
       );

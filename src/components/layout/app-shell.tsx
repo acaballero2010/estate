@@ -54,11 +54,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const { user, agentProfile, signOut } = useAuth();
+  const { user, agentProfile, loading, signOut } = useAuth();
   const { leads, properties, deals } = useCrmStore();
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [globalQuery, setGlobalQuery] = React.useState("");
   const [searchFocused, setSearchFocused] = React.useState(false);
+
+  const isPublicRoute =
+    pathname === "/" ||
+    pathname === "/login" ||
+    pathname?.startsWith("/quote/") ||
+    pathname === "/inquire";
+
+  React.useEffect(() => {
+    if (!isPublicRoute && !loading && !user) {
+      router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
+    }
+  }, [isPublicRoute, loading, user, pathname, router]);
 
   const navItems = React.useMemo<NavItem[]>(
     () => [
@@ -162,6 +174,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const isPublicStandalone =
     pathname === "/" || pathname?.startsWith("/quote/");
+
+  if (!isPublicRoute && loading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg animate-pulse">
+            <Building2 className="h-6 w-6" />
+          </div>
+          <div className="text-center">
+            <h2 className="text-sm font-semibold tracking-wide">PropFlow Estates</h2>
+            <p className="text-xs text-muted-foreground">Verifying Agent Session...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isPublicStandalone) {
     return (

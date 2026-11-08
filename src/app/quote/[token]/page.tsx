@@ -16,11 +16,16 @@ import {
   Globe2,
   Loader2,
   Lock,
+  MessageCircle,
+  Phone,
   Receipt,
   Scale,
+  Send,
   ShieldCheck,
   Sparkles,
   UploadCloud,
+  UserCheck,
+  X,
 } from "lucide-react";
 import {
   computePropertyQuotation,
@@ -165,6 +170,11 @@ function BuyerQuotationPortalContent() {
   );
   const [isGeneratingRaf, setIsGeneratingRaf] = React.useState(false);
   const [trippingRequested, setTrippingRequested] = React.useState(false);
+
+  // Floating Broker Concierge Widget State
+  const [isChatOpen, setIsChatOpen] = React.useState(false);
+  const [chatMessageText, setChatMessageText] = React.useState("");
+  const [isSendingChatMessage, setIsSendingChatMessage] = React.useState(false);
 
   // Digital Reservation Modal State
   const [isReserveModalOpen, setIsReserveModalOpen] = React.useState(false);
@@ -446,6 +456,22 @@ function BuyerQuotationPortalContent() {
       result,
     });
     toast.success("Official PDF quotation downloaded");
+  };
+
+  const handleSendBrokerMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatMessageText.trim()) return;
+    setIsSendingChatMessage(true);
+    if (buyerLead) {
+      sendMessage(
+        buyerLead.id,
+        `💬 [Buyer Portal Message]: "${chatMessageText.trim()}" (Regarding ${liveInput.projectName} - ${liveInput.unitCode})`
+      );
+    }
+    toast.success("Message sent! Your broker will reply shortly.");
+    setChatMessageText("");
+    setIsSendingChatMessage(false);
+    setIsChatOpen(false);
   };
 
   return (
@@ -1162,6 +1188,110 @@ function BuyerQuotationPortalContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Floating Broker Concierge Widget */}
+      <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end">
+        {isChatOpen && (
+          <div className="mb-3 w-[320px] sm:w-[350px] rounded-2xl border bg-background/95 backdrop-blur-md shadow-2xl overflow-hidden transition-all animate-in slide-in-from-bottom-3">
+            {/* Widget Header */}
+            <div className="bg-primary p-3.5 text-primary-foreground">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white font-serif font-bold text-sm">
+                    {agentProfile?.fullName
+                      ? agentProfile.fullName.charAt(0)
+                      : "A"}
+                    <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-primary" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold leading-tight flex items-center gap-1">
+                      {agentProfile?.fullName || "Licensed Real Estate Broker"}
+                      <UserCheck className="h-3 w-3 text-emerald-300" />
+                    </h4>
+                    <p className="text-[10px] text-primary-foreground/80">
+                      {agentProfile?.prcLicenseNumber || "PRC RESA Accredited"}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 text-white hover:bg-white/20 rounded-full"
+                  onClick={() => setIsChatOpen(false)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Direct Connect Quick Buttons */}
+            <div className="p-3 space-y-2.5 bg-muted/10">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <a
+                  href={`https://wa.me/${(agentProfile?.phone || "+639178829102").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hi ${agentProfile?.fullName || "Broker"}, I'm reviewing the quotation for ${liveInput.projectName} (${liveInput.unitCode}) and have a question.`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 rounded-lg border bg-card p-2 text-xs font-semibold text-foreground hover:border-emerald-500 hover:text-emerald-600 transition-colors"
+                >
+                  <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
+                  WhatsApp
+                </a>
+                <a
+                  href={`tel:${agentProfile?.phone || "+639178829102"}`}
+                  className="flex items-center justify-center gap-1.5 rounded-lg border bg-card p-2 text-xs font-semibold text-foreground hover:border-primary hover:text-primary transition-colors"
+                >
+                  <Phone className="h-3.5 w-3.5 text-primary" />
+                  Call Broker
+                </a>
+              </div>
+
+              {/* Inquiry Form */}
+              <form
+                onSubmit={handleSendBrokerMessage}
+                className="space-y-2 pt-1 border-t"
+              >
+                <span className="text-[11px] font-semibold text-muted-foreground block">
+                  Ask a question about this computation:
+                </span>
+                <textarea
+                  value={chatMessageText}
+                  onChange={(e) => setChatMessageText(e.target.value)}
+                  placeholder="e.g. Can we request a 36-month stretch or parking slot inclusion?"
+                  rows={2}
+                  className="w-full resize-none rounded-lg border border-input bg-background p-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary shadow-sm"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="w-full h-7 text-xs gap-1.5"
+                  disabled={isSendingChatMessage || !chatMessageText.trim()}
+                >
+                  <Send className="h-3 w-3" />
+                  Send to Broker CRM
+                </Button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Floating Trigger Pill */}
+        <Button
+          onClick={() => setIsChatOpen(!isChatOpen)}
+          size="lg"
+          className="h-11 rounded-full shadow-xl gap-2 px-4 bg-primary hover:bg-primary/90 text-primary-foreground ring-4 ring-primary/20 transition-all hover:scale-105"
+        >
+          <div className="relative">
+            <MessageCircle className="h-4 w-4" />
+            <span className="absolute -top-1 -right-1 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            </span>
+          </div>
+          <span className="font-semibold text-xs">
+            {isChatOpen ? "Close Concierge" : "Chat with Broker"}
+          </span>
+        </Button>
+      </div>
     </div>
   );
 }

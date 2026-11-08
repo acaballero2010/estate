@@ -17,6 +17,19 @@ const SendQuotationEmailSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Verify agent session cookie or authorization header
+    const authSessionCookie = request.cookies.get("propflow_auth_session");
+    const authHeader = request.headers.get("authorization");
+    if (!authSessionCookie && !authHeader) {
+      return NextResponse.json(
+        {
+          error:
+            "Unauthorized. An active agent session is required to dispatch quotation emails.",
+        },
+        { status: 401 }
+      );
+    }
+
     const json = await request.json();
     const payload = SendQuotationEmailSchema.safeParse(json);
 

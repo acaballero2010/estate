@@ -28,6 +28,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useAuth } from "@/lib/firebase/auth-context";
 import {
   CURRENCY_CONFIGS,
   convertFromPhp,
@@ -37,6 +38,7 @@ import {
 
 export default function PublicLandingPage() {
   const { theme, setTheme } = useTheme();
+  const { user, agentProfile } = useAuth();
 
   // Interactive Live Calculator Teaser State
   const [calcPrice, setCalcPrice] = React.useState<number>(18500000);
@@ -110,16 +112,31 @@ export default function PublicLandingPage() {
               <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </Button>
 
-            <Button variant="outline" size="sm" className="hidden sm:inline-flex h-8 text-xs" asChild>
-              <Link href="/login">Agent Sign In</Link>
-            </Button>
-
-            <Button size="sm" className="h-8 text-xs gap-1.5 shadow-sm" asChild>
-              <Link href="/dashboard">
-                <span>Enter Workspace</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </Button>
+            {user ? (
+              <div className="flex items-center gap-2">
+                <span className="hidden lg:inline text-xs font-semibold text-muted-foreground">
+                  {agentProfile?.fullName || user.displayName || user.email}
+                </span>
+                <Button size="sm" className="h-8 text-xs gap-1.5 shadow-sm" asChild>
+                  <Link href="/dashboard">
+                    <span>Command Center</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="hidden sm:inline-flex h-8 text-xs" asChild>
+                  <Link href="/login">Agent Sign In</Link>
+                </Button>
+                <Button size="sm" className="h-8 text-xs gap-1.5 shadow-sm" asChild>
+                  <Link href="/login">
+                    <span>Register Free</span>
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -149,12 +166,21 @@ export default function PublicLandingPage() {
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <Button size="lg" className="h-10 sm:h-11 px-6 text-xs sm:text-sm gap-2 shadow-md" asChild>
-              <Link href="/dashboard">
-                Launch Agent Workspace
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            {user ? (
+              <Button size="lg" className="h-10 sm:h-11 px-6 text-xs sm:text-sm gap-2 shadow-md" asChild>
+                <Link href="/dashboard">
+                  Enter Command Center
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : (
+              <Button size="lg" className="h-10 sm:h-11 px-6 text-xs sm:text-sm gap-2 shadow-md" asChild>
+                <Link href="/login">
+                  Launch Agent Workspace
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
             <Button variant="outline" size="lg" className="h-10 sm:h-11 px-6 text-xs sm:text-sm gap-2" asChild>
               <Link href="/showcase">
                 <Film className="h-4 w-4 text-primary" />
@@ -811,12 +837,21 @@ export default function PublicLandingPage() {
             Join hundreds of licensed real estate brokers and sales directors closing higher-ticket deals with PropFlow.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
-            <Button size="lg" className="h-11 px-8 text-xs sm:text-sm gap-2 shadow-md" asChild>
-              <Link href="/dashboard">
-                Launch Workspace
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            {user ? (
+              <Button size="lg" className="h-11 px-8 text-xs sm:text-sm gap-2 shadow-md" asChild>
+                <Link href="/dashboard">
+                  Launch Command Center
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            ) : (
+              <Button size="lg" className="h-11 px-8 text-xs sm:text-sm gap-2 shadow-md" asChild>
+                <Link href="/login">
+                  Create Agent Account
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            )}
             <Button variant="outline" size="lg" className="h-11 px-8 text-xs sm:text-sm" asChild>
               <Link href="/inquire">
                 Request Brokerage Demo
