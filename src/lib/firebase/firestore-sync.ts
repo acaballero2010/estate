@@ -134,88 +134,76 @@ export async function loadOrSeedAgentFirestoreWorkspace(
   const quotesCol = collection(firestoreDb, "agents", agentUid, "quotations");
   const dealsCol = collection(firestoreDb, "agents", agentUid, "deals");
 
-  const leadsSnap = await getDocs(leadsCol);
+  // Query all collections concurrently
+  const [leadsSnap, propsSnap, msgsSnap, quotesSnap, dealsSnap] =
+    await Promise.all([
+      getDocs(leadsCol),
+      getDocs(propsCol),
+      getDocs(msgsCol),
+      getDocs(quotesCol),
+      getDocs(dealsCol),
+    ]);
 
-  // First-time workspace initialization for this agent UID
-  if (leadsSnap.empty) {
-    const isDemoAgent =
-      agentUid === "demo-agent-marco" || agentUid.startsWith("demo-");
+  const isDemoAgent =
+    agentUid === "demo-agent-marco" || agentUid.startsWith("demo-");
 
+  // Seed demo records ONLY if running in a demo account AND all collections are empty
+  if (isDemoAgent && leadsSnap.empty && propsSnap.empty) {
     const batch = writeBatch(firestoreDb);
 
-    // Only populate mock inventory and client records if running in a demo agent account
-    if (isDemoAgent) {
-      for (const prop of defaults.properties) {
-        batch.set(
-          doc(propsCol, prop.id),
-          toFirestorePayload({
-            ...prop,
-            listedByAgentId: agentUid,
-          })
-        );
-      }
-      for (const lead of defaults.leads) {
-        batch.set(doc(leadsCol, lead.id), toFirestorePayload(lead));
-      }
-      for (const msg of defaults.messages) {
-        batch.set(doc(msgsCol, msg.id), toFirestorePayload(msg));
-      }
-      for (const deal of defaults.deals) {
-        batch.set(doc(dealsCol, deal.id), toFirestorePayload(deal));
-      }
+    for (const prop of defaults.properties) {
+      batch.set(
+        doc(propsCol, prop.id),
+        toFirestorePayload({
+          ...prop,
+          listedByAgentId: agentUid,
+        })
+      );
+    }
+    for (const lead of defaults.leads) {
+      batch.set(doc(leadsCol, lead.id), toFirestorePayload(lead));
+    }
+    for (const msg of defaults.messages) {
+      batch.set(doc(msgsCol, msg.id), toFirestorePayload(msg));
+    }
+    for (const deal of defaults.deals) {
+      batch.set(doc(dealsCol, deal.id), toFirestorePayload(deal));
     }
 
     await batch.commit();
 
     return {
-      leads: isDemoAgent ? defaults.leads : [],
-      properties: isDemoAgent ? defaults.properties : [],
-      messages: isDemoAgent ? defaults.messages : [],
-      deals: isDemoAgent ? defaults.deals : [],
+      leads: defaults.leads,
+      properties: defaults.properties,
+      messages: defaults.messages,
+      deals: defaults.deals,
       quotations: [],
     };
   }
 
-  const [propsSnap, msgsSnap, quotesSnap, dealsSnap] = await Promise.all([
-    getDocs(propsCol),
-    getDocs(msgsCol),
-    getDocs(quotesCol),
-    getDocs(dealsCol),
-  ]);
-
-  const isDemoAgent =
-    agentUid === "demo-agent-marco" || agentUid.startsWith("demo-");
-
+  // Load all existing saved documents for this agent from Cloud Firestore
   const leads = leadsSnap.docs.map((d) =>
     hydrateLeadDates(d.data() as Record<string, unknown>)
   );
-  const properties = propsSnap.empty
-    ? isDemoAgent
-      ? defaults.properties
-      : []
-    : propsSnap.docs.map((d) =>
-        hydratePropertyDates(d.data() as Record<string, unknown>)
-      );
+  const properties = propsSnap.docs.map((d) =>
+    hydratePropertyDates(d.data() as Record<string, unknown>)
+  );
   const messages = msgsSnap.docs.map((d) =>
     hydrateMessageDates(d.data() as Record<string, unknown>)
   );
   const quotations = quotesSnap.docs.map((d) =>
     hydrateQuotationDates(d.data() as Record<string, unknown>)
   );
-  const deals = dealsSnap.empty
-    ? agentUid.startsWith("demo")
-      ? defaults.deals
-      : []
-    : dealsSnap.docs.map((d) =>
-        hydrateDealDates(d.data() as Record<string, unknown>)
-      );
+  const deals = dealsSnap.docs.map((d) =>
+    hydrateDealDates(d.data() as Record<string, unknown>)
+  );
 
   return {
-    leads,
+    leads: leads.length > 0 ? leads : isDemoAgent ? defaults.leads : [],
     properties,
-    messages,
+    messages: messages.length > 0 ? messages : isDemoAgent ? defaults.messages : [],
     quotations,
-    deals,
+    deals: deals.length > 0 ? deals : isDemoAgent ? defaults.deals : [],
   };
 }
 

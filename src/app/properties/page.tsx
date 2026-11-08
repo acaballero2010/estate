@@ -42,7 +42,7 @@ import {
 } from "@/lib/schemas";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { uploadMediaFile } from "@/lib/firebase/storage-upload";
-import { INITIAL_PROPERTIES, useCrmStore } from "@/lib/store/crm-store";
+import { useCrmStore } from "@/lib/store/crm-store";
 import { SocialShareCardModal } from "@/components/marketing/social-share-card-modal";
 import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -112,30 +112,33 @@ export default function PropertiesPage() {
 
   // Determine which properties belong directly to this logged-in agent
   const myListedProperties = React.useMemo(() => {
-    if (!user) {
-      return properties;
-    }
-    return properties.filter(
-      (p) => p.listedByAgentId === user.uid || (!p.listedByAgentId && user.uid.startsWith("demo"))
-    );
+    return properties.filter((p) => {
+      // Accredited master developer catalog items belong to masterlist
+      if (p.listedByAgentId === "accredited-master-inventory") return false;
+      // If user is not yet logged in / offline, treat any custom listed property as agent listing
+      if (!user) return true;
+      // If user is authenticated:
+      return (
+        p.listedByAgentId === user.uid ||
+        p.listedByAgentId === "agent-direct-listing" ||
+        (!p.listedByAgentId && (user.uid.startsWith("demo") || Boolean(user.email?.includes("kalyepos.com")))) ||
+        (user.uid.startsWith("demo") && p.listedByAgentId === "00000000-0000-4000-8000-000000000001")
+      );
+    });
   }, [properties, user]);
 
   // Master accredited developer inventory
   const accreditedProperties = React.useMemo(() => {
-    const list = properties.filter((p) => p.listedByAgentId !== user?.uid);
-    if (list.length === 0) {
-      return INITIAL_PROPERTIES;
-    }
-    return list;
+    return properties.filter(
+      (p) =>
+        p.listedByAgentId === "accredited-master-inventory" ||
+        (!p.listedByAgentId && !user) ||
+        (p.listedByAgentId !== user?.uid && p.listedByAgentId !== "agent-direct-listing")
+    );
   }, [properties, user]);
 
   const allPropertiesCombined = React.useMemo(() => {
-    const map = new Map<string, Property>();
-    properties.forEach((p) => map.set(p.id, p));
-    INITIAL_PROPERTIES.forEach((p) => {
-      if (!map.has(p.id)) map.set(p.id, p);
-    });
-    return Array.from(map.values());
+    return properties;
   }, [properties]);
 
   const displayedProperties = React.useMemo(() => {
@@ -231,8 +234,8 @@ export default function PropertiesPage() {
   const onSubmitNewProperty = (values: CreatePropertyInput) => {
     const created = addProperty({
       ...values,
-      listedByAgentId: user?.uid,
-      listedByAgentName: agentProfile?.fullName || "Agent",
+      listedByAgentId: user?.uid || "agent-direct-listing",
+      listedByAgentName: agentProfile?.fullName || user?.displayName || "Agent",
       galleryImages:
         values.galleryImages && values.galleryImages.length > 0
           ? values.galleryImages
@@ -240,6 +243,7 @@ export default function PropertiesPage() {
           ? [values.thumbnailUrl]
           : [],
     });
+    setPortfolioView("MY_LISTINGS");
     toast.success(
       `Added ${created.projectName} (${created.unitCode}) to your exclusive listings!`
     );
@@ -343,8 +347,8 @@ export default function PropertiesPage() {
                 "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
             ],
             videoWalkthroughUrl: row.videoWalkthroughUrl?.trim() || undefined,
-            listedByAgentId: user?.uid,
-            listedByAgentName: agentProfile?.fullName || undefined,
+            listedByAgentId: user?.uid || "agent-direct-listing",
+            listedByAgentName: agentProfile?.fullName || user?.displayName || "Agent",
           }));
 
           if (parsedInputs.length === 0) {
@@ -353,6 +357,7 @@ export default function PropertiesPage() {
           }
 
           bulkAddProperties(parsedInputs);
+          setPortfolioView("MY_LISTINGS");
           toast.success(`Successfully imported ${parsedInputs.length} property units!`);
           setIsBulkOpen(false);
           if (csvFileInputRef.current) {

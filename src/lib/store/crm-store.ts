@@ -54,6 +54,7 @@ export const INITIAL_PROPERTIES: Property[] = [
     ],
     videoWalkthroughUrl:
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    listedByAgentId: "accredited-master-inventory",
     createdAt: new Date("2026-09-10T08:00:00Z"),
   },
   {
@@ -92,6 +93,7 @@ export const INITIAL_PROPERTIES: Property[] = [
     ],
     videoWalkthroughUrl:
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    listedByAgentId: "accredited-master-inventory",
     createdAt: new Date("2026-09-15T08:00:00Z"),
   },
   {
@@ -128,6 +130,7 @@ export const INITIAL_PROPERTIES: Property[] = [
     ],
     videoWalkthroughUrl:
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoy.mp4",
+    listedByAgentId: "accredited-master-inventory",
     createdAt: new Date("2026-10-01T08:00:00Z"),
   },
   {
@@ -164,6 +167,7 @@ export const INITIAL_PROPERTIES: Property[] = [
     ],
     videoWalkthroughUrl:
       "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+    listedByAgentId: "accredited-master-inventory",
     createdAt: new Date("2026-10-12T08:00:00Z"),
   },
 ];
@@ -683,6 +687,35 @@ interface CrmState {
   }) => Deal;
 }
 
+function getLocalCustomProperties(agentUid?: string | null): Property[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const key = `propflow_properties_${agentUid || "default"}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((p: Record<string, unknown>) => ({
+      ...(p as unknown as Property),
+      createdAt: new Date((p.createdAt as string) || Date.now()),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalCustomProperty(property: Property, agentUid?: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    const key = `propflow_properties_${agentUid || "default"}`;
+    const existing = getLocalCustomProperties(agentUid);
+    const updated = [property, ...existing.filter((p) => p.id !== property.id)];
+    localStorage.setItem(key, JSON.stringify(updated));
+  } catch (e) {
+    console.warn("localStorage property save failed:", e);
+  }
+}
+
 export const useCrmStore = create<CrmState>((set, get) => ({
   activeAgentUid: null,
   isSyncingFirestore: false,
@@ -695,10 +728,15 @@ export const useCrmStore = create<CrmState>((set, get) => ({
 
   syncWithAgentAccount: async (agentUid) => {
     if (!agentUid) {
+      const localProps = getLocalCustomProperties("default");
+      const propMap = new Map<string, Property>();
+      INITIAL_PROPERTIES.forEach((p) => propMap.set(p.id, p));
+      localProps.forEach((p) => propMap.set(p.id, p));
+
       set({
         activeAgentUid: null,
         leads: INITIAL_LEADS,
-        properties: INITIAL_PROPERTIES,
+        properties: Array.from(propMap.values()),
         messages: INITIAL_MESSAGES,
         deals: INITIAL_DEALS,
         quotations: [],
@@ -716,13 +754,25 @@ export const useCrmStore = create<CrmState>((set, get) => ({
         deals: INITIAL_DEALS,
         quotations: [],
       });
+
+      // Merge: Master developer catalog + local custom properties + Firestore properties + in-memory store properties
+      const localProps = [
+        ...getLocalCustomProperties(agentUid),
+        ...getLocalCustomProperties("default"),
+      ];
+      const propMap = new Map<string, Property>();
+      INITIAL_PROPERTIES.forEach((p) => propMap.set(p.id, p));
+      get().properties.forEach((p) => propMap.set(p.id, p));
+      localProps.forEach((p) => propMap.set(p.id, p));
+      workspace.properties.forEach((p) => propMap.set(p.id, p));
+
       set({
-        leads: workspace.leads,
-        properties: workspace.properties,
-        messages: workspace.messages,
-        deals: workspace.deals,
-        quotations: workspace.quotations,
-        selectedLeadId: workspace.leads[0]?.id ?? null,
+        leads: workspace.leads.length > 0 ? workspace.leads : get().leads,
+        properties: Array.from(propMap.values()),
+        messages: workspace.messages.length > 0 ? workspace.messages : get().messages,
+        deals: workspace.deals.length > 0 ? workspace.deals : get().deals,
+        quotations: workspace.quotations.length > 0 ? workspace.quotations : get().quotations,
+        selectedLeadId: workspace.leads[0]?.id ?? get().selectedLeadId,
         isSyncingFirestore: false,
       });
     } catch {
@@ -788,32 +838,46 @@ export const useCrmStore = create<CrmState>((set, get) => ({
 
   addProperty: (input) => {
     const activeUid = get().activeAgentUid;
+    const resolvedAgentId = input.listedByAgentId || activeUid || "agent-direct-listing";
     const newProperty: Property = {
       ...input,
       id: crypto.randomUUID(),
-      listedByAgentId: input.listedByAgentId || activeUid || AGENT_ID,
+      listedByAgentId: resolvedAgentId,
       createdAt: new Date(),
     };
     set((state) => ({
-      properties: [newProperty, ...state.properties],
+      properties: [newProperty, ...state.properties.filter((p) => p.id !== newProperty.id)],
     }));
-    void persistAgentDocument(get().activeAgentUid, "properties", newProperty);
+    const targetUid = activeUid || (resolvedAgentId !== "agent-direct-listing" ? resolvedAgentId : null);
+    saveLocalCustomProperty(newProperty, targetUid);
+    saveLocalCustomProperty(newProperty, "default");
+    if (targetUid) {
+      void persistAgentDocument(targetUid, "properties", newProperty);
+    }
     return newProperty;
   },
 
   bulkAddProperties: (inputs) => {
     const activeUid = get().activeAgentUid;
-    const createdList: Property[] = inputs.map((input) => ({
-      ...input,
-      id: crypto.randomUUID(),
-      listedByAgentId: input.listedByAgentId || activeUid || AGENT_ID,
-      createdAt: new Date(),
-    }));
+    const createdList: Property[] = inputs.map((input) => {
+      const resolvedAgentId = input.listedByAgentId || activeUid || "agent-direct-listing";
+      return {
+        ...input,
+        id: crypto.randomUUID(),
+        listedByAgentId: resolvedAgentId,
+        createdAt: new Date(),
+      };
+    });
     set((state) => ({
       properties: [...createdList, ...state.properties],
     }));
     createdList.forEach((prop) => {
-      void persistAgentDocument(get().activeAgentUid, "properties", prop);
+      const targetUid = activeUid || (prop.listedByAgentId !== "agent-direct-listing" ? prop.listedByAgentId : null);
+      saveLocalCustomProperty(prop, targetUid);
+      saveLocalCustomProperty(prop, "default");
+      if (targetUid) {
+        void persistAgentDocument(targetUid, "properties", prop);
+      }
     });
     return createdList;
   },
