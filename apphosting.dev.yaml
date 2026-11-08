@@ -1,0 +1,57 @@
+# Firebase App Hosting Development / Staging Configuration (dev branch)
+# Reference: https://firebase.google.com/docs/app-hosting/multiple-environments
+
+runConfig:
+  minInstances: 0
+  maxInstances: 3
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  - variable: NEXT_PUBLIC_APP_ENV
+    value: "development"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyDsJdY0UiNIgJ-N-kjfmtsj7Pqt-igPPuA"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "propflow-crm-estate-2026.firebaseapp.com"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "propflow-crm-estate-2026"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "propflow-crm-estate-2026.firebasestorage.app"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "495877269210"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:495877269210:web:71e8c54f7ef6dcf03727e3"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: META_WEBHOOK_VERIFY_TOKEN
+    value: "propflow_meta_verify_secret_2026"
+    availability:
+      - RUNTIME
