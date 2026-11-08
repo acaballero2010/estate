@@ -71,3 +71,4 @@ This project includes pre-configured [apphosting.yaml](./apphosting.yaml), [fire
    ```bash
    npx firebase-tools deploy --only firestore:rules,storage
    ```
+
