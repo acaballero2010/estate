@@ -1,0 +1,969 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
+import {
+  Bath,
+  BedDouble,
+  Building2,
+  Calculator,
+  Car,
+  Film,
+  Grid3X3,
+  ImagePlus,
+  LayoutGrid,
+  Loader2,
+  MapPin,
+  Maximize2,
+  PlayCircle,
+  Plus,
+  Sparkles,
+  UploadCloud,
+  Video,
+} from "lucide-react";
+import {
+  CreatePropertyInputSchema,
+  type CreatePropertyInput,
+  type Property,
+} from "@/lib/schemas";
+import { uploadMediaFile } from "@/lib/firebase/storage-upload";
+import { useCrmStore } from "@/lib/store/crm-store";
+import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+
+interface StackingCell {
+  floorLabel: string;
+  unitNumber: string;
+  configLabel: string;
+  floorAreaSqm: number;
+  listPrice: number;
+  status: Property["status"];
+  linkedPropertyId?: string;
+}
+
+const DEFAULT_TOWER_FLOORS = [
+  { floor: 28, prefix: "28" },
+  { floor: 26, prefix: "26" },
+  { floor: 24, prefix: "24" },
+  { floor: 22, prefix: "22" },
+  { floor: 18, prefix: "18" },
+  { floor: 15, prefix: "15" },
+  { floor: 11, prefix: "11" },
+];
+
+export default function PropertiesPage() {
+  const router = useRouter();
+  const { properties, addProperty, updatePropertyStatus } = useCrmStore();
+  const [isAddOpen, setIsAddOpen] = React.useState(false);
+  const [openQuoteAfterSave, setOpenQuoteAfterSave] = React.useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = React.useState(false);
+  const [isUploadingVideo, setIsUploadingVideo] = React.useState(false);
+  const [uploadedPhotoPreview, setUploadedPhotoPreview] = React.useState<string | null>(null);
+  const [selectedStackCell, setSelectedStackCell] = React.useState<StackingCell | null>(null);
+
+  const form = useForm<CreatePropertyInput>({
+    resolver: zodResolver(CreatePropertyInputSchema),
+    defaultValues: {
+      projectName: "",
+      developerName: "Ayala Premier Estates",
+      unitCode: "",
+      propertyType: "CONDOMINIUM",
+      locationCity: "Bonifacio Global City, Taguig",
+      address: "",
+      floorAreaSqm: 65,
+      lotAreaSqm: 0,
+      bedrooms: 2,
+      bathrooms: 2,
+      parkingSlots: 1,
+      listPrice: 12500000,
+      reservationFee: 50000,
+      status: "AVAILABLE",
+      turnoverDate: "Q4 2027 (Pre-selling)",
+      description: "",
+      amenities: ["Swimming Pool", "24/7 Concierge", "Fitness Gym"],
+      thumbnailUrl:
+        "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+      galleryImages: [
+        "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+      ],
+      videoWalkthroughUrl:
+        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    },
+  });
+
+  const handlePhotoFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsUploadingPhoto(true);
+    try {
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file) {
+          const url = await uploadMediaFile(file, "properties");
+          uploadedUrls.push(url);
+        }
+      }
+      if (uploadedUrls[0]) {
+        form.setValue("thumbnailUrl", uploadedUrls[0]);
+        const existingGallery = form.getValues("galleryImages") || [];
+        form.setValue("galleryImages", [...uploadedUrls, ...existingGallery]);
+        setUploadedPhotoPreview(uploadedUrls[0]);
+        toast.success(
+          `Uploaded ${uploadedUrls.length} property photo${
+            uploadedUrls.length > 1 ? "s" : ""
+          }!`
+        );
+      }
+    } catch {
+      toast.error("Could not upload photo file.");
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const handleVideoFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingVideo(true);
+    try {
+      const url = await uploadMediaFile(file, "walkthroughs");
+      form.setValue("videoWalkthroughUrl", url);
+      toast.success(`Uploaded walkthrough video: ${file.name}`);
+    } catch {
+      toast.error("Could not upload video file.");
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const onSubmitNewProperty = (values: CreatePropertyInput) => {
+    const created = addProperty({
+      ...values,
+      galleryImages:
+        values.galleryImages && values.galleryImages.length > 0
+          ? values.galleryImages
+          : values.thumbnailUrl
+          ? [values.thumbnailUrl]
+          : [],
+    });
+    toast.success(
+      `Added ${created.projectName} (${created.unitCode}) to inventory!`
+    );
+    setIsAddOpen(false);
+    setUploadedPhotoPreview(null);
+    form.reset();
+
+    if (openQuoteAfterSave) {
+      router.push(`/quotations?propertyId=${created.id}`);
+    }
+  };
+
+  // Build Interactive Tower & Block-Lot Stacking Matrix combining live inventory + tower floors
+  const stackingMatrix = React.useMemo(() => {
+    return DEFAULT_TOWER_FLOORS.map(({ floor, prefix }) => {
+      const slots = ["01", "02", "05", "08", "09"].map((suffix, idx) => {
+        const unitCodeShort = `${prefix}${suffix}`;
+        const matchedProp = properties.find((p) =>
+          p.unitCode.includes(unitCodeShort)
+        );
+
+        if (matchedProp) {
+          return {
+            floorLabel: `${floor}F`,
+            unitNumber: matchedProp.unitCode,
+            configLabel: `${matchedProp.bedrooms}BR • ${matchedProp.floorAreaSqm} sqm`,
+            floorAreaSqm: matchedProp.floorAreaSqm,
+            listPrice: matchedProp.listPrice,
+            status: matchedProp.status,
+            linkedPropertyId: matchedProp.id,
+          } satisfies StackingCell;
+        }
+
+        // Deterministic synthetic unit cells around real inventory
+        const isCorner = suffix === "01" || suffix === "08";
+        const area = isCorner ? 84.5 : suffix === "09" ? 112.0 : 42.0;
+        const price =
+          area * 195000 + floor * 45000;
+        const syntheticStatus: Property["status"] =
+          (floor + idx) % 7 === 0
+            ? "SOLD"
+            : (floor + idx) % 5 === 0
+            ? "RESERVED"
+            : (floor + idx) % 4 === 0
+            ? "ON_HOLD"
+            : "AVAILABLE";
+
+        return {
+          floorLabel: `${floor}F`,
+          unitNumber: `Tower B - ${unitCodeShort} (${
+            isCorner ? "2BR Corner" : suffix === "09" ? "3BR Suite" : "1BR Deluxe"
+          })`,
+          configLabel: `${
+            isCorner ? "2BR" : suffix === "09" ? "3BR" : "1BR"
+          } • ${area} sqm`,
+          floorAreaSqm: area,
+          listPrice: price,
+          status: syntheticStatus,
+        } satisfies StackingCell;
+      });
+
+      return {
+        floor,
+        floorLabel: `${floor}th Floor`,
+        slots,
+      };
+    });
+  }, [properties]);
+
+  const handleComputeFromStackCell = (cell: StackingCell) => {
+    if (cell.linkedPropertyId) {
+      router.push(`/quotations?propertyId=${cell.linkedPropertyId}`);
+      return;
+    }
+    // Create the unit in inventory on the fly and jump to its quotation
+    const created = addProperty({
+      projectName: "The Meridian Park Residences",
+      developerName: "Ayala Premier Estates",
+      unitCode: cell.unitNumber,
+      propertyType: "CONDOMINIUM",
+      locationCity: "Bonifacio Global City, Taguig",
+      address: "34th Street cor. 9th Ave, BGC, Taguig",
+      floorAreaSqm: cell.floorAreaSqm,
+      lotAreaSqm: 0,
+      bedrooms: cell.configLabel.startsWith("3BR")
+        ? 3
+        : cell.configLabel.startsWith("2BR")
+        ? 2
+        : 1,
+      bathrooms: cell.configLabel.startsWith("1BR") ? 1 : 2,
+      parkingSlots: cell.configLabel.startsWith("1BR") ? 0 : 1,
+      listPrice: cell.listPrice,
+      reservationFee: 100000,
+      status: cell.status,
+      turnoverDate: "Q4 2027 (Pre-selling)",
+      description: `Selected from Interactive Tower Stacking Plan (${cell.floorLabel}).`,
+      amenities: ["50m Lap Pool & Sky Deck", "24/7 Concierge & Security"],
+      thumbnailUrl:
+        "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+      galleryImages: [
+        "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+      ],
+      videoWalkthroughUrl:
+        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    });
+    toast.success(`Loaded ${created.unitCode} into Quotation Calculator`);
+    router.push(`/quotations?propertyId=${created.id}`);
+  };
+
+  return (
+    <div className="container space-y-6 py-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-lg font-bold tracking-tight sm:text-xl">
+            Accredited Property & Unit Inventory
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            Manage pre-selling & RFO units, inspect the interactive tower stacking plan, and launch customized quotations.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            asChild
+          >
+            <Link href="/showcase">
+              <PlayCircle className="h-3.5 w-3.5 text-primary" />
+              Open Storefront Showcase
+            </Link>
+          </Button>
+
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-8 text-xs gap-1.5">
+                <Plus className="h-3.5 w-3.5" />
+                Add Property Unit
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Add New Property / Unit to Inventory</DialogTitle>
+                <DialogDescription>
+                  Enter project specifications, upload photos/videos from your device, and configure pricing.
+                </DialogDescription>
+              </DialogHeader>
+
+              <form
+                onSubmit={form.handleSubmit(onSubmitNewProperty)}
+                className="space-y-3 py-2"
+              >
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="prop-project">Project / Estate Name</Label>
+                    <Input
+                      id="prop-project"
+                      placeholder="e.g. Parklinks North Tower"
+                      {...form.register("projectName")}
+                    />
+                    {form.formState.errors.projectName && (
+                      <p className="text-[11px] text-destructive">
+                        {form.formState.errors.projectName.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="prop-dev">Developer Name</Label>
+                    <Input
+                      id="prop-dev"
+                      placeholder="e.g. Ayala Land Premier"
+                      {...form.register("developerName")}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="prop-unit">Unit / Block-Lot Code</Label>
+                    <Input
+                      id="prop-unit"
+                      placeholder="e.g. Tower B - 2608 (2BR Corner)"
+                      {...form.register("unitCode")}
+                    />
+                    {form.formState.errors.unitCode && (
+                      <p className="text-[11px] text-destructive">
+                        {form.formState.errors.unitCode.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="prop-type">Property Category</Label>
+                    <select
+                      id="prop-type"
+                      {...form.register("propertyType")}
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm"
+                    >
+                      <option value="CONDOMINIUM">Condominium</option>
+                      <option value="HOUSE_AND_LOT">House & Lot</option>
+                      <option value="TOWNHOUSE">Townhouse</option>
+                      <option value="RESIDENTIAL_LOT">Residential Lot</option>
+                      <option value="COMMERCIAL_UNIT">Commercial Unit</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="prop-city">City / Location</Label>
+                    <Input
+                      id="prop-city"
+                      placeholder="e.g. Pasig / Quezon City"
+                      {...form.register("locationCity")}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="prop-turnover">Turnover Status / Date</Label>
+                    <Input
+                      id="prop-turnover"
+                      placeholder="e.g. Ready for Occupancy (RFO)"
+                      {...form.register("turnoverDate")}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="prop-addr">Exact Street / Estate Address</Label>
+                  <Input
+                    id="prop-addr"
+                    placeholder="e.g. C5 Road, Brgy. Ugong Norte"
+                    {...form.register("address")}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <div className="space-y-1">
+                    <Label>Floor (sqm)</Label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      {...form.register("floorAreaSqm", {
+                        valueAsNumber: true,
+                      })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Lot (sqm)</Label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      {...form.register("lotAreaSqm", { valueAsNumber: true })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Bedrooms</Label>
+                    <Input
+                      type="number"
+                      {...form.register("bedrooms", { valueAsNumber: true })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Baths</Label>
+                    <Input
+                      type="number"
+                      {...form.register("bathrooms", { valueAsNumber: true })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Parking</Label>
+                    <Input
+                      type="number"
+                      {...form.register("parkingSlots", {
+                        valueAsNumber: true,
+                      })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="prop-price">Total List Price (₱)</Label>
+                    <Input
+                      id="prop-price"
+                      type="number"
+                      step="50000"
+                      className="tabular-nums font-semibold"
+                      {...form.register("listPrice", { valueAsNumber: true })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="prop-res">Standard Reservation Fee (₱)</Label>
+                    <Input
+                      id="prop-res"
+                      type="number"
+                      step="5000"
+                      className="tabular-nums"
+                      {...form.register("reservationFee", {
+                        valueAsNumber: true,
+                      })}
+                    />
+                  </div>
+                </div>
+
+                {/* Direct File Uploader for Photos & Walkthrough Video */}
+                <div className="rounded-lg border border-dashed bg-muted/20 p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold flex items-center gap-1.5">
+                      <UploadCloud className="h-3.5 w-3.5 text-primary" />
+                      Upload Property Media (Firebase Storage / Local Device)
+                    </span>
+                    {uploadedPhotoPreview && (
+                      <Badge variant="won" className="text-[10px]">
+                        Media Attached ✓
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium hover:bg-accent transition-colors">
+                      {isUploadingPhoto ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                      ) : (
+                        <ImagePlus className="h-3.5 w-3.5 text-primary" />
+                      )}
+                      <span>
+                        {isUploadingPhoto
+                          ? "Uploading Photo..."
+                          : "Upload Photos (JPG/PNG)"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={handlePhotoFileUpload}
+                      />
+                    </label>
+
+                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium hover:bg-accent transition-colors">
+                      {isUploadingVideo ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                      ) : (
+                        <Video className="h-3.5 w-3.5 text-primary" />
+                      )}
+                      <span>
+                        {isUploadingVideo
+                          ? "Uploading Video..."
+                          : "Upload Video Tour (.mp4)"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={handleVideoFileUpload}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="prop-thumb" className="text-[11px]">
+                        Or Cover Photo URL
+                      </Label>
+                      <Input
+                        id="prop-thumb"
+                        className="h-8 text-xs"
+                        placeholder="https://images.unsplash.com/..."
+                        {...form.register("thumbnailUrl")}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="prop-video" className="text-[11px]">
+                        Or Walkthrough Video URL (.mp4)
+                      </Label>
+                      <Input
+                        id="prop-video"
+                        className="h-8 text-xs"
+                        placeholder="https://.../walkthrough.mp4"
+                        {...form.register("videoWalkthroughUrl")}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="prop-desc">
+                    Storefront Highlight Description
+                  </Label>
+                  <Input
+                    id="prop-desc"
+                    placeholder="e.g. Corner 2BR overlooking golf course with smart home automation"
+                    {...form.register("description")}
+                  />
+                </div>
+
+                <DialogFooter className="gap-2 pt-3">
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setOpenQuoteAfterSave(false)}
+                  >
+                    Save to Inventory
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    onClick={() => setOpenQuoteAfterSave(true)}
+                  >
+                    Save & Configure Quotation →
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      <Tabs defaultValue="cards" className="space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList className="h-9">
+            <TabsTrigger value="cards" className="text-xs gap-1.5">
+              <LayoutGrid className="h-3.5 w-3.5" />
+              Unit Cards ({properties.length})
+            </TabsTrigger>
+            <TabsTrigger value="stacking" className="text-xs gap-1.5">
+              <Grid3X3 className="h-3.5 w-3.5 text-primary" />
+              Interactive Tower Stacking Plan
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />
+              Available
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-amber-500" />
+              On Hold / Reserved
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm bg-slate-400" />
+              Sold
+            </span>
+          </div>
+        </div>
+
+        {/* TAB 1: INVENTORY CARDS */}
+        <TabsContent value="cards" className="mt-0">
+          <div className="grid gap-4 md:grid-cols-2">
+            {properties.map((prop) => (
+              <Card key={prop.id} className="flex flex-col justify-between overflow-hidden">
+                <CardHeader className="p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Badge
+                        variant={
+                          prop.status === "AVAILABLE"
+                            ? "won"
+                            : prop.status === "SOLD"
+                            ? "secondary"
+                            : "reservation"
+                        }
+                        className="text-[10px]"
+                      >
+                        {prop.status.replace(/_/g, " ")}
+                      </Badge>
+                      <select
+                        aria-label="Update unit status"
+                        value={prop.status}
+                        onChange={(e) => {
+                          const nextStatus = e.target.value as Property["status"];
+                          updatePropertyStatus(prop.id, nextStatus);
+                          toast.success(
+                            `${prop.unitCode} status updated to ${nextStatus}`
+                          );
+                        }}
+                        className="h-6 rounded border bg-background px-1.5 text-[10px] font-medium text-muted-foreground focus:outline-none"
+                      >
+                        <option value="AVAILABLE">Set Available</option>
+                        <option value="ON_HOLD">Set On Hold</option>
+                        <option value="RESERVED">Set Reserved</option>
+                        <option value="SOLD">Set Sold</option>
+                      </select>
+                    </div>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {prop.turnoverDate}
+                    </span>
+                  </div>
+                  <CardTitle className="mt-2 text-base font-bold">
+                    {prop.projectName}
+                  </CardTitle>
+                  <CardDescription className="text-xs flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                    {prop.unitCode} • {prop.locationCity}
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="p-4 pt-0 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-y py-2.5">
+                    <span className="flex items-center gap-1">
+                      <Maximize2 className="h-3.5 w-3.5 text-foreground" />
+                      {prop.floorAreaSqm} sqm Floor
+                    </span>
+                    {prop.lotAreaSqm > 0 && (
+                      <span>• {prop.lotAreaSqm} sqm Lot</span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <BedDouble className="h-3.5 w-3.5 text-foreground" />
+                      {prop.bedrooms} BR
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Bath className="h-3.5 w-3.5 text-foreground" />
+                      {prop.bathrooms} T&B
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Car className="h-3.5 w-3.5 text-foreground" />
+                      {prop.parkingSlots} Parking
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline justify-between">
+                    <div>
+                      <span className="text-[11px] text-muted-foreground block">
+                        Total List Price
+                      </span>
+                      <span className="text-lg font-bold tabular-nums">
+                        {formatCurrency(prop.listPrice, "PHP", 0)}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[11px] text-muted-foreground block">
+                        Reservation Fee
+                      </span>
+                      <span className="text-sm font-semibold tabular-nums">
+                        {formatCurrency(prop.reservationFee, "PHP", 0)}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+
+                <CardFooter className="grid grid-cols-2 gap-2 p-4 pt-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs gap-1.5"
+                    asChild
+                  >
+                    <Link href={`/showcase?propertyId=${prop.id}`}>
+                      <Film className="h-3.5 w-3.5 text-primary" />
+                      Photos & Video
+                    </Link>
+                  </Button>
+                  <Button size="sm" className="w-full text-xs gap-1.5" asChild>
+                    <Link href={`/quotations?propertyId=${prop.id}`}>
+                      <Calculator className="h-3.5 w-3.5" />
+                      Compute Quote
+                    </Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        {/* TAB 2: INTERACTIVE TOWER / BLOCK-LOT STACKING PLAN */}
+        <TabsContent value="stacking" className="mt-0">
+          <div className="grid gap-5 lg:grid-cols-12">
+            <Card className="min-w-0 lg:col-span-8">
+              <CardHeader className="border-b bg-muted/20 p-4">
+                <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+                  <div>
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-primary" />
+                      The Meridian Park Residences — Tower B Live Stacking Plan
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Click any unit cell to inspect floor area, pricing, availability status, or launch a one-click buyer computation.
+                    </CardDescription>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] w-fit">
+                    35 Residential Units Mapped
+                  </Badge>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-4 overflow-x-auto">
+                <div className="min-w-[540px] space-y-2">
+                  {stackingMatrix.map((row) => (
+                    <div
+                      key={row.floor}
+                      className="grid grid-cols-6 items-center gap-2"
+                    >
+                      <div className="rounded-md bg-muted/50 px-2.5 py-3 text-center text-xs font-bold text-muted-foreground">
+                        {row.floorLabel}
+                      </div>
+                      {row.slots.map((cell) => {
+                        const isSelected =
+                          selectedStackCell?.unitNumber === cell.unitNumber;
+                        return (
+                          <button
+                            key={cell.unitNumber}
+                            type="button"
+                            onClick={() => setSelectedStackCell(cell)}
+                            className={cn(
+                              "flex flex-col items-start justify-between rounded-lg border p-2 text-left transition-all hover:scale-[1.02]",
+                              cell.status === "AVAILABLE" &&
+                                "border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20",
+                              (cell.status === "RESERVED" ||
+                                cell.status === "ON_HOLD") &&
+                                "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20",
+                              cell.status === "SOLD" &&
+                                "border-slate-300 bg-slate-100 opacity-70 dark:border-slate-700 dark:bg-slate-800",
+                              isSelected && "ring-2 ring-primary ring-offset-1"
+                            )}
+                          >
+                            <div className="flex w-full items-center justify-between gap-1">
+                              <span className="text-[11px] font-bold truncate">
+                                {cell.unitNumber
+                                  .replace("Tower B - ", "")
+                                  .split(" ")[0]}
+                              </span>
+                              <span
+                                className={cn(
+                                  "h-2 w-2 shrink-0 rounded-full",
+                                  cell.status === "AVAILABLE" &&
+                                    "bg-emerald-500",
+                                  (cell.status === "RESERVED" ||
+                                    cell.status === "ON_HOLD") &&
+                                    "bg-amber-500",
+                                  cell.status === "SOLD" && "bg-slate-400"
+                                )}
+                              />
+                            </div>
+                            <span className="text-[10px] text-muted-foreground truncate w-full">
+                              {cell.configLabel}
+                            </span>
+                            <span className="mt-1 text-[11px] font-semibold tabular-nums">
+                              {formatCompactCurrency(cell.listPrice)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Right Inspector Panel for Selected Stack Unit */}
+            <Card className="min-w-0 lg:col-span-4 h-fit">
+              <CardHeader className="border-b bg-muted/20 p-4">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Stacking Unit Inspector
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {selectedStackCell
+                    ? `Inspecting ${selectedStackCell.unitNumber}`
+                    : "Select any floor/unit cell on the left grid"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                {selectedStackCell ? (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <Badge
+                        variant={
+                          selectedStackCell.status === "AVAILABLE"
+                            ? "won"
+                            : selectedStackCell.status === "SOLD"
+                            ? "secondary"
+                            : "reservation"
+                        }
+                        className="text-[10px]"
+                      >
+                        {selectedStackCell.status}
+                      </Badge>
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        {selectedStackCell.floorLabel}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-base font-bold">
+                        {selectedStackCell.unitNumber}
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        The Meridian Park Residences • BGC, Taguig
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5 rounded-lg border bg-muted/20 p-3 text-xs">
+                      <div>
+                        <span className="text-[10px] text-muted-foreground block">
+                          Configuration
+                        </span>
+                        <span className="font-semibold">
+                          {selectedStackCell.configLabel}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-muted-foreground block">
+                          Gross List Price
+                        </span>
+                        <span className="font-bold text-primary tabular-nums">
+                          {formatCurrency(selectedStackCell.listPrice, "PHP", 0)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-1">
+                      <Button
+                        size="sm"
+                        className="w-full text-xs gap-1.5"
+                        disabled={selectedStackCell.status === "SOLD"}
+                        onClick={() =>
+                          handleComputeFromStackCell(selectedStackCell)
+                        }
+                      >
+                        <Calculator className="h-3.5 w-3.5" />
+                        {selectedStackCell.status === "SOLD"
+                          ? "Unit Already Sold"
+                          : "Launch Quotation Calculator →"}
+                      </Button>
+
+                      {selectedStackCell.linkedPropertyId && (
+                        <div className="grid grid-cols-2 gap-1.5 pt-1">
+                          {(
+                            [
+                              "AVAILABLE",
+                              "ON_HOLD",
+                              "RESERVED",
+                              "SOLD",
+                            ] as const
+                          ).map((st) => (
+                            <Button
+                              key={st}
+                              type="button"
+                              variant={
+                                selectedStackCell.status === st
+                                  ? "default"
+                                  : "outline"
+                              }
+                              size="sm"
+                              className="h-7 text-[10px]"
+                              onClick={() => {
+                                if (selectedStackCell.linkedPropertyId) {
+                                  updatePropertyStatus(
+                                    selectedStackCell.linkedPropertyId,
+                                    st
+                                  );
+                                  setSelectedStackCell({
+                                    ...selectedStackCell,
+                                    status: st,
+                                  });
+                                  toast.success(
+                                    `Updated ${selectedStackCell.unitNumber} to ${st}`
+                                  );
+                                }
+                              }}
+                            >
+                              {st.replace(/_/g, " ")}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    Click any unit box in the Tower Stacking Plan to inspect its floor area, price, and launch a sample quotation.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

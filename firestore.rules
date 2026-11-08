@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Agent profile document
+    match /agents/{agentId} {
+      allow read, write: if request.auth != null && request.auth.uid == agentId;
+
+      // Agent-scoped CRM collections (leads, quotations, deals, messages, properties)
+      match /{collectionName}/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == agentId;
+      }
+    }
+
+    // Public shared quotation snapshots for /quote/[token] buyer portal
+    match /public_quotations/{shareToken} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update, delete: if request.auth != null;
+    }
+  }
+}
+

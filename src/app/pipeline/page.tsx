@@ -1,0 +1,833 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
+import {
+  Calculator,
+  CheckCircle2,
+  FileText,
+  Filter,
+  Flame,
+  GripVertical,
+  Kanban,
+  LayoutList,
+  MapPin,
+  MessageSquare,
+  MoreHorizontal,
+  Search,
+  UserPlus,
+  Wallet,
+} from "lucide-react";
+import {
+  CreateLeadInputSchema,
+  type CreateLeadInput,
+  type Lead,
+  type PipelineStage,
+  PIPELINE_STAGE_LABELS,
+} from "@/lib/schemas";
+import { useCrmStore } from "@/lib/store/crm-store";
+import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+const KANBAN_STAGES: PipelineStage[] = [
+  "NEW_LEAD",
+  "CONTACTED",
+  "SITE_TRIPPING",
+  "PROPOSAL_SENT",
+  "RESERVATION",
+  "CLOSED_WON",
+];
+
+const STAGE_BADGE_VARIANT: Record<PipelineStage, BadgeProps["variant"]> = {
+  NEW_LEAD: "new",
+  CONTACTED: "contacted",
+  SITE_TRIPPING: "tripping",
+  PROPOSAL_SENT: "proposal",
+  RESERVATION: "reservation",
+  CLOSED_WON: "won",
+  CLOSED_LOST: "lost",
+};
+
+export default function PipelinePage() {
+  const { leads, moveLeadStage, addLead, addLeadNote } = useCrmStore();
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [priorityFilter, setPriorityFilter] = React.useState<string>("ALL");
+  const [activeLead, setActiveLead] = React.useState<Lead | null>(null);
+  const [draggedLeadId, setDraggedLeadId] = React.useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] =
+    React.useState<PipelineStage | null>(null);
+  const [isNewLeadOpen, setIsNewLeadOpen] = React.useState(false);
+  const [noteDraft, setNoteDraft] = React.useState("");
+
+  // Sync activeLead with store updates
+  const selectedLead = React.useMemo(
+    () => leads.find((l) => l.id === activeLead?.id) ?? null,
+    [leads, activeLead]
+  );
+
+  // Filter leads
+  const filteredLeads = React.useMemo(() => {
+    return leads.filter((lead) => {
+      const matchesPriority =
+        priorityFilter === "ALL" || lead.priority === priorityFilter;
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return matchesPriority;
+      const fullName = `${lead.firstName} ${lead.lastName}`.toLowerCase();
+      const locMatch = lead.preferredLocations.some((loc) =>
+        loc.toLowerCase().includes(q)
+      );
+      return (
+        matchesPriority &&
+        (fullName.includes(q) ||
+          lead.phone.toLowerCase().includes(q) ||
+          locMatch)
+      );
+    });
+  }, [leads, searchQuery, priorityFilter]);
+
+  // Drag & Drop handlers with optimistic UI + Toast
+  const handleDragStart = (e: React.DragEvent, leadId: string) => {
+    setDraggedLeadId(leadId);
+    e.dataTransfer.setData("text/plain", leadId);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, stage: PipelineStage) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverStage !== stage) {
+      setDragOverStage(stage);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetStage: PipelineStage) => {
+    e.preventDefault();
+    const leadId = e.dataTransfer.getData("text/plain") || draggedLeadId;
+    setDraggedLeadId(null);
+    setDragOverStage(null);
+
+    if (!leadId) return;
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead || lead.stage === targetStage) return;
+
+    moveLeadStage(leadId, targetStage);
+    toast.success(
+      `Moved ${lead.firstName} ${lead.lastName} to ${PIPELINE_STAGE_LABELS[targetStage]}`
+    );
+  };
+
+  const handleManualStageChange = (
+    lead: Lead,
+    targetStage: PipelineStage
+  ) => {
+    if (lead.stage === targetStage) return;
+    moveLeadStage(lead.id, targetStage);
+    toast.success(
+      `Updated ${lead.firstName} ${lead.lastName} → ${PIPELINE_STAGE_LABELS[targetStage]}`
+    );
+  };
+
+  // New Lead Form with React Hook Form + Zod
+  const form = useForm<CreateLeadInput>({
+    resolver: zodResolver(CreateLeadInputSchema),
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "+63 917 ",
+      stage: "NEW_LEAD",
+      source: "MANUAL_ENTRY",
+      priority: "HIGH",
+      budgetMin: 5000000,
+      budgetMax: 12000000,
+      preferredLocations: ["Bonifacio Global City, Taguig"],
+      preferredPropertyTypes: ["CONDOMINIUM"],
+      financingPreference: "BANK",
+      notes: "",
+    },
+  });
+
+  const onCreateLeadSubmit = (values: CreateLeadInput) => {
+    const created = addLead(values);
+    toast.success(
+      `Lead ${created.firstName} ${created.lastName} added to pipeline`
+    );
+    setIsNewLeadOpen(false);
+    form.reset();
+  };
+
+  const handleAddNote = () => {
+    if (!selectedLead || !noteDraft.trim()) return;
+    addLeadNote(selectedLead.id, noteDraft.trim());
+    setNoteDraft("");
+    toast.success("Activity note saved to lead timeline");
+  };
+
+  return (
+    <div className="flex flex-col h-full min-w-0 max-w-full overflow-x-hidden space-y-4 p-4 md:p-6">
+      {/* Header & Controls */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-lg font-bold tracking-tight sm:text-xl">
+            Lead Pipeline & Deal Flow
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            Drag cards across stages or tap any buyer to inspect KYC docs, tripping notes, and quotations.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 sm:w-56">
+            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Filter name, location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 pl-8 text-xs"
+            />
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                <Filter className="h-3.5 w-3.5" />
+                {priorityFilter === "ALL" ? "All Priorities" : priorityFilter}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel className="text-xs">
+                Filter Lead Priority
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {["ALL", "HOT", "HIGH", "MEDIUM", "LOW"].map((p) => (
+                <DropdownMenuItem
+                  key={p}
+                  onClick={() => setPriorityFilter(p)}
+                  className="text-xs"
+                >
+                  {p === "ALL" ? "All Leads" : `${p} Priority`}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Dialog open={isNewLeadOpen} onOpenChange={setIsNewLeadOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-8 text-xs gap-1.5">
+                <UserPlus className="h-3.5 w-3.5" />
+                New Lead
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Capture Real Estate Lead</DialogTitle>
+                <DialogDescription>
+                  Enter buyer contact details, target budget, and preferred property type.
+                </DialogDescription>
+              </DialogHeader>
+              <form
+                onSubmit={form.handleSubmit(onCreateLeadSubmit)}
+                className="space-y-3 py-2"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="firstName">First Name</Label>
+                    <Input
+                      id="firstName"
+                      placeholder="e.g. Bianca"
+                      {...form.register("firstName")}
+                    />
+                    {form.formState.errors.firstName && (
+                      <p className="text-[11px] text-destructive">
+                        {form.formState.errors.firstName.message}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="lastName">Last Name</Label>
+                    <Input
+                      id="lastName"
+                      placeholder="e.g. Elizalde"
+                      {...form.register("lastName")}
+                    />
+                    {form.formState.errors.lastName && (
+                      <p className="text-[11px] text-destructive">
+                        {form.formState.errors.lastName.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="phone">Mobile / Viber</Label>
+                    <Input id="phone" {...form.register("phone")} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="buyer@email.com"
+                      {...form.register("email")}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="budgetMin">Min Budget (₱)</Label>
+                    <Input
+                      id="budgetMin"
+                      type="number"
+                      {...form.register("budgetMin", { valueAsNumber: true })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="budgetMax">Max Budget (₱)</Label>
+                    <Input
+                      id="budgetMax"
+                      type="number"
+                      {...form.register("budgetMax", { valueAsNumber: true })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="location">Preferred City / Estate</Label>
+                  <Input
+                    id="location"
+                    defaultValue="Bonifacio Global City, Taguig"
+                    onChange={(e) =>
+                      form.setValue("preferredLocations", [
+                        e.target.value || "Metro Manila",
+                      ])
+                    }
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="notes">Initial Buyer Notes</Label>
+                  <Input
+                    id="notes"
+                    placeholder="e.g. Looking for 2BR RFO or near turnover"
+                    {...form.register("notes")}
+                  />
+                </div>
+
+                <DialogFooter className="pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsNewLeadOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" size="sm">
+                    Save to Pipeline
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* View Switcher: Kanban vs Compact Table */}
+      <Tabs defaultValue="kanban" className="flex-1 flex flex-col min-w-0">
+        <div className="flex items-center justify-between">
+          <TabsList className="h-8">
+            <TabsTrigger value="kanban" className="text-xs gap-1.5 h-6">
+              <Kanban className="h-3.5 w-3.5" />
+              Kanban Board
+            </TabsTrigger>
+            <TabsTrigger value="table" className="text-xs gap-1.5 h-6">
+              <LayoutList className="h-3.5 w-3.5" />
+              Lead Table ({filteredLeads.length})
+            </TabsTrigger>
+          </TabsList>
+          <span className="hidden text-xs text-muted-foreground sm:inline">
+            Total Pipeline Potential:{" "}
+            <strong className="text-foreground tabular-nums">
+              {formatCompactCurrency(
+                filteredLeads.reduce((acc, l) => acc + l.budgetMax, 0)
+              )}
+            </strong>
+          </span>
+        </div>
+
+        {/* KANBAN BOARD VIEW */}
+        <TabsContent value="kanban" className="flex-1 mt-3 min-w-0">
+          <div className="flex w-full max-w-full gap-3 overflow-x-auto pb-4 snap-x snap-mandatory md:snap-none">
+            {KANBAN_STAGES.map((stage) => {
+              const stageLeads = filteredLeads.filter(
+                (l) => l.stage === stage
+              );
+              const stageVolume = stageLeads.reduce(
+                (acc, l) => acc + l.budgetMax,
+                0
+              );
+              const isDropTarget = dragOverStage === stage;
+
+              return (
+                <div
+                  key={stage}
+                  onDragOver={(e) => handleDragOver(e, stage)}
+                  onDragLeave={() => setDragOverStage(null)}
+                  onDrop={(e) => handleDrop(e, stage)}
+                  className={cn(
+                    "flex w-[285px] shrink-0 snap-center flex-col rounded-xl border bg-muted/30 p-2.5 transition-colors",
+                    isDropTarget && "border-primary bg-primary/5 ring-1 ring-primary"
+                  )}
+                >
+                  {/* Column Header */}
+                  <div className="mb-2.5 flex items-center justify-between px-1">
+                    <div className="flex items-center gap-1.5">
+                      <Badge
+                        variant={STAGE_BADGE_VARIANT[stage]}
+                        className="text-[11px]"
+                      >
+                        {PIPELINE_STAGE_LABELS[stage]}
+                      </Badge>
+                      <span className="text-xs font-semibold text-muted-foreground tabular-nums">
+                        {stageLeads.length}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
+                      {formatCompactCurrency(stageVolume)}
+                    </span>
+                  </div>
+
+                  {/* Cards Stack */}
+                  <div className="flex flex-1 flex-col gap-2.5 min-h-[380px]">
+                    {stageLeads.map((lead) => (
+                      <Card
+                        key={lead.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, lead.id)}
+                        onClick={() => setActiveLead(lead)}
+                        className={cn(
+                          "group cursor-pointer border bg-card p-3 shadow-sm transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.99]",
+                          draggedLeadId === lead.id && "opacity-40"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <div>
+                              <h3 className="text-xs font-semibold leading-tight">
+                                {lead.firstName} {lead.lastName}
+                              </h3>
+                              <span className="text-[10px] text-muted-foreground">
+                                {lead.source.replace(/_/g, " ")}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div
+                            className="flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {lead.priority === "HOT" && (
+                              <Badge
+                                variant="destructive"
+                                className="h-4 px-1 text-[9px] gap-0.5"
+                              >
+                                <Flame className="h-2.5 w-2.5" />
+                                HOT
+                              </Badge>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                >
+                                  <MoreHorizontal className="h-3.5 w-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel className="text-xs">
+                                  Move Stage To
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                {KANBAN_STAGES.map((st) => (
+                                  <DropdownMenuItem
+                                    key={st}
+                                    disabled={st === lead.stage}
+                                    onClick={() =>
+                                      handleManualStageChange(lead, st)
+                                    }
+                                    className="text-xs"
+                                  >
+                                    {PIPELINE_STAGE_LABELS[st]}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </div>
+
+                        {/* Budget & Location */}
+                        <div className="mt-2.5 space-y-1 text-[11px]">
+                          <div className="flex items-center justify-between text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Wallet className="h-3 w-3 text-primary" />
+                              Budget:
+                            </span>
+                            <span className="font-semibold text-foreground tabular-nums">
+                              {formatCompactCurrency(lead.budgetMin)} –{" "}
+                              {formatCompactCurrency(lead.budgetMax)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 text-muted-foreground truncate">
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            <span className="truncate">
+                              {lead.preferredLocations.join(", ")}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Tags & Quick Actions Footer */}
+                        <div className="mt-3 flex items-center justify-between border-t pt-2">
+                          <div className="flex flex-wrap gap-1">
+                            <Badge
+                              variant="outline"
+                              className="h-4 px-1.5 text-[9px] font-normal"
+                            >
+                              {lead.financingPreference}
+                            </Badge>
+                            {lead.documents.length > 0 && (
+                              <Badge
+                                variant="secondary"
+                                className="h-4 px-1.5 text-[9px]"
+                              >
+                                {lead.documents.length} KYC
+                              </Badge>
+                            )}
+                          </div>
+                          <div
+                            className="flex items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-primary"
+                              asChild
+                              title="Open in Messenger Hub"
+                            >
+                              <Link href={`/inbox?leadId=${lead.id}`}>
+                                <MessageSquare className="h-3.5 w-3.5" />
+                              </Link>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground hover:text-primary"
+                              asChild
+                              title="Create Quotation"
+                            >
+                              <Link href={`/quotations?leadId=${lead.id}`}>
+                                <Calculator className="h-3.5 w-3.5" />
+                              </Link>
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+
+                    {stageLeads.length === 0 && (
+                      <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                        Drop lead card here
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </TabsContent>
+
+        {/* COMPACT DATA TABLE VIEW */}
+        <TabsContent value="table" className="mt-3">
+          <Card>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Buyer Name</TableHead>
+                  <TableHead>Stage</TableHead>
+                  <TableHead>Target Budget</TableHead>
+                  <TableHead className="hidden md:table-cell">
+                    Preferred Location
+                  </TableHead>
+                  <TableHead className="hidden sm:table-cell">
+                    Financing
+                  </TableHead>
+                  <TableHead className="text-right">Quick Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredLeads.map((lead) => (
+                  <TableRow
+                    key={lead.id}
+                    className="cursor-pointer"
+                    onClick={() => setActiveLead(lead)}
+                  >
+                    <TableCell>
+                      <div className="font-semibold text-xs">
+                        {lead.firstName} {lead.lastName}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {lead.phone}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={STAGE_BADGE_VARIANT[lead.stage]}>
+                        {PIPELINE_STAGE_LABELS[lead.stage]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="tabular-nums text-xs font-medium">
+                      {formatCompactCurrency(lead.budgetMin)} –{" "}
+                      {formatCompactCurrency(lead.budgetMax)}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
+                      {lead.preferredLocations.join(", ")}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <Badge variant="outline" className="text-[10px]">
+                        {lead.financingPreference}
+                      </Badge>
+                    </TableCell>
+                    <TableCell
+                      className="text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                          <Link href={`/inbox?leadId=${lead.id}`}>Chat</Link>
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
+                          <Link href={`/quotations?leadId=${lead.id}`}>
+                            Quote
+                          </Link>
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* LEAD DETAIL DRAWER (SHEET) */}
+      <Sheet
+        open={!!selectedLead}
+        onOpenChange={(open) => !open && setActiveLead(null)}
+      >
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          {selectedLead && (
+            <div className="space-y-5">
+              <SheetHeader className="text-left">
+                <div className="flex items-center gap-2">
+                  <Badge variant={STAGE_BADGE_VARIANT[selectedLead.stage]}>
+                    {PIPELINE_STAGE_LABELS[selectedLead.stage]}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px]">
+                    {selectedLead.priority} PRIORITY
+                  </Badge>
+                </div>
+                <SheetTitle className="text-lg font-bold">
+                  {selectedLead.firstName} {selectedLead.lastName}
+                </SheetTitle>
+                <SheetDescription className="text-xs">
+                  {selectedLead.phone} •{" "}
+                  {selectedLead.email || "No email provided"}
+                </SheetDescription>
+              </SheetHeader>
+
+              {/* Quick Stage Switcher */}
+              <div className="space-y-1.5">
+                <Label>Pipeline Stage Progression</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {KANBAN_STAGES.map((st) => (
+                    <Button
+                      key={st}
+                      size="sm"
+                      variant={
+                        selectedLead.stage === st ? "default" : "outline"
+                      }
+                      className="h-7 text-[11px] px-2.5"
+                      onClick={() => handleManualStageChange(selectedLead, st)}
+                    >
+                      {PIPELINE_STAGE_LABELS[st]}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Financial & Property Profile */}
+              <div className="grid grid-cols-2 gap-2.5 rounded-lg border bg-muted/30 p-3 text-xs">
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">
+                    Budget Range
+                  </span>
+                  <span className="font-bold tabular-nums">
+                    {formatCurrency(selectedLead.budgetMin, "PHP", 0)} –{" "}
+                    {formatCurrency(selectedLead.budgetMax, "PHP", 0)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[11px]">
+                    Financing Target
+                  </span>
+                  <span className="font-semibold">
+                    {selectedLead.financingPreference}
+                  </span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground block text-[11px]">
+                    Preferred Locations & Property Types
+                  </span>
+                  <span className="font-medium">
+                    {selectedLead.preferredLocations.join(" • ")} (
+                    {selectedLead.preferredPropertyTypes.join(", ")})
+                  </span>
+                </div>
+              </div>
+
+              {/* Direct Action Accelerators */}
+              <div className="grid grid-cols-2 gap-2">
+                <Button size="sm" className="w-full text-xs gap-1.5" asChild>
+                  <Link href={`/quotations?leadId=${selectedLead.id}`}>
+                    <Calculator className="h-3.5 w-3.5" />
+                    Generate Quotation
+                  </Link>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="w-full text-xs gap-1.5"
+                  asChild
+                >
+                  <Link href={`/inbox?leadId=${selectedLead.id}`}>
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    Messenger Thread
+                  </Link>
+                </Button>
+              </div>
+
+              {/* Interaction Notes & Timeline */}
+              <div className="space-y-2">
+                <Label>Interaction Timeline & Tripping Notes</Label>
+                <div className="rounded-lg border bg-card p-3 text-xs whitespace-pre-line leading-relaxed">
+                  {selectedLead.notes || "No notes recorded yet."}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Log site tripping feedback or call summary..."
+                    value={noteDraft}
+                    onChange={(e) => setNoteDraft(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                  <Button size="sm" className="h-8 text-xs" onClick={handleAddNote}>
+                    Log Note
+                  </Button>
+                </div>
+              </div>
+
+              {/* Uploaded Buyer Identity / KYC Documents */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Uploaded Buyer KYC & Reservation Docs</Label>
+                  <Badge variant="secondary" className="text-[10px]">
+                    {selectedLead.documents.length} Files
+                  </Badge>
+                </div>
+                {selectedLead.documents.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+                    No buyer identity documents uploaded yet.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {selectedLead.documents.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between rounded-md border p-2 text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-primary" />
+                          <div>
+                            <p className="font-medium">{doc.name}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {doc.type.replace(/_/g, " ")}
+                            </p>
+                          </div>
+                        </div>
+                        {doc.verified && (
+                          <Badge variant="won" className="gap-1 text-[10px]">
+                            <CheckCircle2 className="h-3 w-3" /> Verified
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
