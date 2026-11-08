@@ -13,6 +13,7 @@ import {
   Kanban,
   MessageSquareText,
   FileCheck2,
+  LayoutDashboard,
   Menu,
   Moon,
   Sun,
@@ -61,6 +62,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const navItems = React.useMemo<NavItem[]>(
     () => [
+      {
+        title: "Command Center",
+        href: "/dashboard",
+        icon: LayoutDashboard,
+      },
       {
         title: "Pipeline",
         href: "/pipeline",
@@ -154,6 +160,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     toast.info("Signed out of PropFlow Agent Portal");
   };
 
+  const isPublicStandalone =
+    pathname === "/" || pathname?.startsWith("/quote/");
+
+  if (isPublicStandalone) {
+    return (
+      <div className="min-h-screen w-full bg-background text-foreground">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background md:flex-row">
       {/* Desktop Collapsible Sidebar */}
@@ -165,7 +182,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-3.5">
           <Link
-            href="/"
+            href="/dashboard"
             className="flex items-center gap-2.5 font-semibold tracking-tight"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
