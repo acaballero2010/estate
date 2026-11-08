@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
+  ArrowLeftRight,
   Building2,
   CalendarCheck,
+  Check,
   CheckCircle2,
   Download,
   Eraser,
@@ -15,6 +17,7 @@ import {
   Loader2,
   Lock,
   Receipt,
+  Scale,
   ShieldCheck,
   Sparkles,
   UploadCloud,
@@ -22,6 +25,7 @@ import {
 import {
   computePropertyQuotation,
   FINANCING_TYPE_DEFAULTS,
+  type Property,
   type QuotationCalculationInput,
 } from "@/lib/schemas";
 import { downloadQuotationPdf } from "@/components/quotations/quotation-pdf-document";
@@ -30,6 +34,7 @@ import { uploadMediaFile } from "@/lib/firebase/storage-upload";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { useAuth } from "@/lib/firebase/auth-context";
 import {
+  cn,
   convertFromPhp,
   CURRENCY_CONFIGS,
   formatCurrency,
@@ -101,21 +106,39 @@ function BuyerQuotationPortalContent() {
     return properties.find((p) => p.unitCode === unitParam) ?? defaultProp;
   }, [matchedQuotation, searchParams, properties, defaultProp]);
 
+  const [selectedPropertyId, setSelectedPropertyId] = React.useState<
+    string | null
+  >(null);
+
+  const activeProperty = React.useMemo(() => {
+    if (selectedPropertyId) {
+      return (
+        properties.find((p) => p.id === selectedPropertyId) ?? matchedProperty
+      );
+    }
+    return matchedProperty;
+  }, [selectedPropertyId, properties, matchedProperty]);
+
+  const [compareIds, setCompareIds] = React.useState<string[]>(() => {
+    return properties.slice(0, 3).map((p) => p.id);
+  });
+  const [showComparison, setShowComparison] = React.useState(true);
+
   const baseInput: QuotationCalculationInput = React.useMemo(() => {
-    if (matchedQuotation) {
+    if (matchedQuotation && !selectedPropertyId) {
       return matchedQuotation.calculationInput;
     }
 
     return {
-      projectName: matchedProperty.projectName,
-      unitCode: matchedProperty.unitCode,
-      floorAreaSqm: matchedProperty.floorAreaSqm,
-      lotAreaSqm: matchedProperty.lotAreaSqm,
-      listPrice: matchedProperty.listPrice,
+      projectName: activeProperty.projectName,
+      unitCode: activeProperty.unitCode,
+      floorAreaSqm: activeProperty.floorAreaSqm,
+      lotAreaSqm: activeProperty.lotAreaSqm,
+      listPrice: activeProperty.listPrice,
       promoDiscountPercent: 3.0,
       miscFeesPercent: 6.5,
       includeMiscInTcp: true,
-      reservationFee: matchedProperty.reservationFee,
+      reservationFee: activeProperty.reservationFee,
       downPaymentPercent: 20,
       downPaymentTermMonths: 24,
       annualLumpsumAmount: 0,
@@ -124,7 +147,7 @@ function BuyerQuotationPortalContent() {
       annualInterestRate: 7.5,
       loanTenorYears: 15,
     };
-  }, [matchedQuotation, matchedProperty]);
+  }, [matchedQuotation, selectedPropertyId, activeProperty]);
 
   const [selectedTenor, setSelectedTenor] = React.useState<number>(
     baseInput.loanTenorYears
@@ -171,6 +194,57 @@ function BuyerQuotationPortalContent() {
     () => computePropertyQuotation(liveInput),
     [liveInput]
   );
+
+  const comparedUnitsData = React.useMemo(() => {
+    return compareIds
+      .map((id) => properties.find((p) => p.id === id))
+      .filter((p): p is Property => Boolean(p))
+      .map((prop) => {
+        const input: QuotationCalculationInput = {
+          projectName: prop.projectName,
+          unitCode: prop.unitCode,
+          floorAreaSqm: prop.floorAreaSqm,
+          lotAreaSqm: prop.lotAreaSqm,
+          listPrice: prop.listPrice,
+          promoDiscountPercent: liveInput.promoDiscountPercent,
+          miscFeesPercent: liveInput.miscFeesPercent,
+          includeMiscInTcp: liveInput.includeMiscInTcp,
+          reservationFee: prop.reservationFee,
+          downPaymentPercent: liveInput.downPaymentPercent,
+          downPaymentTermMonths: selectedDpMonths,
+          annualLumpsumAmount: 0,
+          isStepUpEquity: isStepUp,
+          financingType: liveInput.financingType,
+          annualInterestRate: liveInput.annualInterestRate,
+          loanTenorYears: selectedTenor,
+        };
+        const computed = computePropertyQuotation(input);
+        const pricePerSqm =
+          prop.floorAreaSqm > 0
+            ? computed.totalContractPrice / prop.floorAreaSqm
+            : 0;
+        return {
+          property: prop,
+          input,
+          computed,
+          pricePerSqm,
+          isCurrent: prop.id === activeProperty.id,
+        };
+      });
+  }, [
+    compareIds,
+    properties,
+    liveInput.promoDiscountPercent,
+    liveInput.miscFeesPercent,
+    liveInput.includeMiscInTcp,
+    liveInput.downPaymentPercent,
+    liveInput.financingType,
+    liveInput.annualInterestRate,
+    selectedDpMonths,
+    isStepUp,
+    selectedTenor,
+    activeProperty.id,
+  ]);
 
   // Canvas E-Signature drawing handlers
   const getCanvasPoint = (
@@ -268,7 +342,7 @@ function BuyerQuotationPortalContent() {
     if (buyerLead) {
       const createdDeal = createDealFromReservation({
         leadId: buyerLead.id,
-        propertyId: matchedProperty.id,
+        propertyId: activeProperty.id,
         quotationId: matchedQuotation?.id,
         totalContractPrice: result.totalContractPrice,
         netCommissionablePrice: result.netListPrice,
@@ -719,6 +793,208 @@ function BuyerQuotationPortalContent() {
             )}
           </div>
         </CardContent>
+      </Card>
+
+      {/* Side-by-Side Unit Comparison Portal */}
+      <Card className="border shadow-sm">
+        <CardHeader className="border-b bg-muted/20 p-4">
+          <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Scale className="h-4 w-4" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  Side-by-Side Unit Comparison
+                  <Badge variant="outline" className="text-[10px] font-normal">
+                    Real-time Amortization Sync
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Compare configurations with identical equity stretch periods ({selectedDpMonths} mos) &amp; currency rates.
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setShowComparison(!showComparison)}
+            >
+              <ArrowLeftRight className="h-3 w-3" />
+              {showComparison ? "Collapse Comparison" : "Expand Comparison (3 Units)"}
+            </Button>
+          </div>
+        </CardHeader>
+
+        {showComparison && (
+          <CardContent className="p-4 space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {comparedUnitsData.map((item, index) => {
+                const prop = item.property;
+                const comp = item.computed;
+                const isSelected = item.isCurrent;
+
+                // Variance calculation vs active unit
+                const dpVariance =
+                  comp.monthlyDownPayment - result.monthlyDownPayment;
+                const tcpVariance =
+                  comp.totalContractPrice - result.totalContractPrice;
+
+                return (
+                  <div
+                    key={prop.id}
+                    className={cn(
+                      "flex flex-col justify-between rounded-xl border p-4 transition-all space-y-3",
+                      isSelected
+                        ? "border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20"
+                        : "bg-card hover:border-muted-foreground/30"
+                    )}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Badge
+                          variant={isSelected ? "default" : "outline"}
+                          className="text-[10px] h-4 px-1.5 font-semibold gap-1"
+                        >
+                          {isSelected && <Check className="h-2.5 w-2.5" />}
+                          {isSelected ? "Active Quotation" : `Option ${index + 1}`}
+                        </Badge>
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          {prop.bedrooms} Bed • {prop.floorAreaSqm} sqm
+                        </span>
+                      </div>
+
+                      {/* Dropdown to swap unit in this column */}
+                      <select
+                        value={prop.id}
+                        onChange={(e) => {
+                          const newId = e.target.value;
+                          setCompareIds((prev) => {
+                            const updated = [...prev];
+                            updated[index] = newId;
+                            return updated;
+                          });
+                        }}
+                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs font-semibold"
+                      >
+                        {properties.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.projectName} — {p.unitCode} ({p.floorAreaSqm} sqm)
+                          </option>
+                        ))}
+                      </select>
+
+                      <div className="space-y-1 pt-1">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">
+                          Total Contract Price (TCP)
+                        </span>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-lg font-serif font-bold text-foreground tabular-nums">
+                            {formatCurrency(comp.totalContractPrice, "PHP", 0)}
+                          </span>
+                        </div>
+                        {selectedCurrency !== "PHP" && (
+                          <span className="text-[11px] font-bold text-primary tabular-nums block">
+                            ≈ {formatCurrency(
+                              convertFromPhp(comp.totalContractPrice, selectedCurrency),
+                              selectedCurrency,
+                              0
+                            )}
+                          </span>
+                        )}
+                        {!isSelected && tcpVariance !== 0 && (
+                          <span
+                            className={cn(
+                              "text-[10px] font-semibold block tabular-nums",
+                              tcpVariance > 0 ? "text-amber-600" : "text-emerald-600"
+                            )}
+                          >
+                            {tcpVariance > 0 ? "+" : ""}
+                            {formatCurrency(tcpVariance, "PHP", 0)} vs active
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Metric Breakdown Box */}
+                      <div className="rounded-lg border bg-muted/30 p-2.5 space-y-1.5 text-[11px]">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Price per Sqm:</span>
+                          <span className="font-semibold tabular-nums">
+                            {formatCurrency(item.pricePerSqm, "PHP", 0)}/sqm
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">
+                            Monthly Equity ({selectedDpMonths}m):
+                          </span>
+                          <span className="font-bold text-primary tabular-nums">
+                            {isStepUp && comp.downPaymentSchedule[0]
+                              ? `Starts ₱${comp.downPaymentSchedule[0].amountDue.toLocaleString()}`
+                              : formatCurrency(comp.monthlyDownPayment, "PHP", 0)}
+                          </span>
+                        </div>
+
+                        {!isSelected && dpVariance !== 0 && (
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-muted-foreground">DP Variance:</span>
+                            <span
+                              className={cn(
+                                "font-semibold tabular-nums",
+                                dpVariance > 0 ? "text-amber-600" : "text-emerald-600"
+                              )}
+                            >
+                              {dpVariance > 0 ? "+" : ""}
+                              {formatCurrency(dpVariance, "PHP", 0)}/mo
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between pt-0.5 border-t">
+                          <span className="text-muted-foreground">
+                            Bank Loan ({selectedTenor}y):
+                          </span>
+                          <span className="font-semibold tabular-nums">
+                            {formatCurrency(comp.monthlyAmortization, "PHP", 0)}/mo
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
+                      {isSelected ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="w-full text-xs font-semibold gap-1.5 cursor-default opacity-90"
+                          disabled
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          Currently Computing
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full text-xs gap-1.5 hover:bg-primary hover:text-primary-foreground transition-all"
+                          onClick={() => {
+                            setSelectedPropertyId(prop.id);
+                            toast.success(`Switched active quote to ${prop.unitCode}!`);
+                          }}
+                        >
+                          <ArrowLeftRight className="h-3.5 w-3.5" />
+                          Select &amp; Compute Unit
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       {/* Digital E-Signature & Reservation Fee Receipt Modal */}

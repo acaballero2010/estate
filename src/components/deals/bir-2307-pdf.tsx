@@ -459,3 +459,4 @@ export async function downloadBir2307Pdf(props: Bir2307PdfProps) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
