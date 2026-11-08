@@ -21,6 +21,7 @@ import {
   Maximize2,
   PlayCircle,
   Ruler,
+  Share2,
   Sparkles,
   Utensils,
 } from "lucide-react";
@@ -29,6 +30,7 @@ import { useCrmStore } from "@/lib/store/crm-store";
 import { formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SocialShareCardModal } from "@/components/marketing/social-share-card-modal";
 import {
   Card,
   CardContent,
@@ -228,6 +230,9 @@ function ShowcaseStorefrontContent() {
   const [categoryFilter, setCategoryFilter] = React.useState<string>("ALL");
   const [selectedProperty, setSelectedProperty] =
     React.useState<Property | null>(null);
+  const [selectedSocialProperty, setSelectedSocialProperty] =
+    React.useState<Property | null>(null);
+  const [isSocialModalOpen, setIsSocialModalOpen] = React.useState(false);
   const [activePhotoIndex, setActivePhotoIndex] = React.useState(0);
   const [activeTab, setActiveTab] = React.useState<string>("photos");
   const [selectedHotspotId, setSelectedHotspotId] =
@@ -432,20 +437,32 @@ function ShowcaseStorefrontContent() {
                 </CardContent>
               </div>
 
-              <CardFooter className="grid grid-cols-2 gap-2 border-t bg-muted/20 p-3">
+              <CardFooter className="grid grid-cols-3 gap-2 border-t bg-muted/20 p-3">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full text-xs gap-1.5"
+                  className="w-full text-[11px] px-1.5 gap-1"
                   onClick={() => handleOpenTourModal(prop)}
                 >
-                  <PlayCircle className="h-3.5 w-3.5 text-primary" />
-                  Photos & Video Tour
+                  <PlayCircle className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span className="truncate">Media Tour</span>
                 </Button>
-                <Button size="sm" className="w-full text-xs gap-1.5" asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-[11px] px-1.5 gap-1 text-primary hover:text-primary"
+                  onClick={() => {
+                    setSelectedSocialProperty(prop);
+                    setIsSocialModalOpen(true);
+                  }}
+                >
+                  <Share2 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Social Card</span>
+                </Button>
+                <Button size="sm" className="w-full text-[11px] px-1.5 gap-1" asChild>
                   <Link href={`/quotations?propertyId=${prop.id}`}>
-                    <Calculator className="h-3.5 w-3.5" />
-                    Compute Quotation
+                    <Calculator className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Compute</span>
                   </Link>
                 </Button>
               </CardFooter>
@@ -1045,6 +1062,16 @@ function ShowcaseStorefrontContent() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 1080x1080 Social Media Marketing Card Generator Modal */}
+      <SocialShareCardModal
+        property={selectedSocialProperty}
+        isOpen={isSocialModalOpen}
+        onClose={() => {
+          setIsSocialModalOpen(false);
+          setSelectedSocialProperty(null);
+        }}
+      />
     </div>
   );
 }

@@ -173,7 +173,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   const isPublicStandalone =
-    pathname === "/" || pathname?.startsWith("/quote/");
+    pathname === "/" ||
+    pathname === "/login" ||
+    pathname?.startsWith("/quote/") ||
+    pathname === "/inquire";
 
   if (!isPublicRoute && loading) {
     return (

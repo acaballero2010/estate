@@ -695,7 +695,16 @@ export const useCrmStore = create<CrmState>((set, get) => ({
 
   syncWithAgentAccount: async (agentUid) => {
     if (!agentUid) {
-      set({ activeAgentUid: null, isSyncingFirestore: false });
+      set({
+        activeAgentUid: null,
+        leads: INITIAL_LEADS,
+        properties: INITIAL_PROPERTIES,
+        messages: INITIAL_MESSAGES,
+        deals: INITIAL_DEALS,
+        quotations: [],
+        selectedLeadId: INITIAL_LEADS[0]?.id ?? null,
+        isSyncingFirestore: false,
+      });
       return;
     }
     set({ activeAgentUid: agentUid, isSyncingFirestore: true });
@@ -778,9 +787,11 @@ export const useCrmStore = create<CrmState>((set, get) => ({
   },
 
   addProperty: (input) => {
+    const activeUid = get().activeAgentUid;
     const newProperty: Property = {
       ...input,
       id: crypto.randomUUID(),
+      listedByAgentId: input.listedByAgentId || activeUid || AGENT_ID,
       createdAt: new Date(),
     };
     set((state) => ({
@@ -791,9 +802,11 @@ export const useCrmStore = create<CrmState>((set, get) => ({
   },
 
   bulkAddProperties: (inputs) => {
+    const activeUid = get().activeAgentUid;
     const createdList: Property[] = inputs.map((input) => ({
       ...input,
       id: crypto.randomUUID(),
+      listedByAgentId: input.listedByAgentId || activeUid || AGENT_ID,
       createdAt: new Date(),
     }));
     set((state) => ({

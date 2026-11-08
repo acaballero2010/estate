@@ -138,18 +138,22 @@ export async function loadOrSeedAgentFirestoreWorkspace(
 
   // First-time workspace initialization for this agent UID
   if (leadsSnap.empty) {
-    const batch = writeBatch(firestoreDb);
-
-    // Always seed accredited developer inventory properties
-    for (const prop of defaults.properties) {
-      batch.set(doc(propsCol, prop.id), toFirestorePayload(prop));
-    }
-
-    // Only populate mock client records if explicitly running in a demo agent account
     const isDemoAgent =
       agentUid === "demo-agent-marco" || agentUid.startsWith("demo-");
 
+    const batch = writeBatch(firestoreDb);
+
+    // Only populate mock inventory and client records if running in a demo agent account
     if (isDemoAgent) {
+      for (const prop of defaults.properties) {
+        batch.set(
+          doc(propsCol, prop.id),
+          toFirestorePayload({
+            ...prop,
+            listedByAgentId: agentUid,
+          })
+        );
+      }
       for (const lead of defaults.leads) {
         batch.set(doc(leadsCol, lead.id), toFirestorePayload(lead));
       }
@@ -165,7 +169,7 @@ export async function loadOrSeedAgentFirestoreWorkspace(
 
     return {
       leads: isDemoAgent ? defaults.leads : [],
-      properties: defaults.properties,
+      properties: isDemoAgent ? defaults.properties : [],
       messages: isDemoAgent ? defaults.messages : [],
       deals: isDemoAgent ? defaults.deals : [],
       quotations: [],
@@ -179,11 +183,16 @@ export async function loadOrSeedAgentFirestoreWorkspace(
     getDocs(dealsCol),
   ]);
 
+  const isDemoAgent =
+    agentUid === "demo-agent-marco" || agentUid.startsWith("demo-");
+
   const leads = leadsSnap.docs.map((d) =>
     hydrateLeadDates(d.data() as Record<string, unknown>)
   );
   const properties = propsSnap.empty
-    ? defaults.properties
+    ? isDemoAgent
+      ? defaults.properties
+      : []
     : propsSnap.docs.map((d) =>
         hydratePropertyDates(d.data() as Record<string, unknown>)
       );

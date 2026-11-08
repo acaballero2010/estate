@@ -24,9 +24,12 @@ import {
   Maximize2,
   PlayCircle,
   Plus,
+  Share2,
+  ShieldCheck,
   Sparkles,
   Upload,
   UploadCloud,
+  UserCheck,
   Video,
 } from "lucide-react";
 import {
@@ -34,8 +37,10 @@ import {
   type CreatePropertyInput,
   type Property,
 } from "@/lib/schemas";
+import { useAuth } from "@/lib/firebase/auth-context";
 import { uploadMediaFile } from "@/lib/firebase/storage-upload";
-import { useCrmStore } from "@/lib/store/crm-store";
+import { INITIAL_PROPERTIES, useCrmStore } from "@/lib/store/crm-store";
+import { SocialShareCardModal } from "@/components/marketing/social-share-card-modal";
 import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -87,6 +92,7 @@ const DEFAULT_TOWER_FLOORS = [
 
 export default function PropertiesPage() {
   const router = useRouter();
+  const { user, agentProfile } = useAuth();
   const { properties, addProperty, bulkAddProperties, updatePropertyStatus } = useCrmStore();
   const [isAddOpen, setIsAddOpen] = React.useState(false);
   const [isBulkOpen, setIsBulkOpen] = React.useState(false);
@@ -96,7 +102,48 @@ export default function PropertiesPage() {
   const [isUploadingVideo, setIsUploadingVideo] = React.useState(false);
   const [uploadedPhotoPreview, setUploadedPhotoPreview] = React.useState<string | null>(null);
   const [selectedStackCell, setSelectedStackCell] = React.useState<StackingCell | null>(null);
+  const [selectedSocialProperty, setSelectedSocialProperty] = React.useState<Property | null>(null);
+  const [isSocialModalOpen, setIsSocialModalOpen] = React.useState(false);
+  const [portfolioView, setPortfolioView] = React.useState<"MY_LISTINGS" | "ACCREDITED" | "ALL">("MY_LISTINGS");
   const csvFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  // Determine which properties belong directly to this logged-in agent
+  const myListedProperties = React.useMemo(() => {
+    if (!user) {
+      return properties;
+    }
+    return properties.filter(
+      (p) => p.listedByAgentId === user.uid || (!p.listedByAgentId && user.uid.startsWith("demo"))
+    );
+  }, [properties, user]);
+
+  // Master accredited developer inventory
+  const accreditedProperties = React.useMemo(() => {
+    const list = properties.filter((p) => p.listedByAgentId !== user?.uid);
+    if (list.length === 0) {
+      return INITIAL_PROPERTIES;
+    }
+    return list;
+  }, [properties, user]);
+
+  const allPropertiesCombined = React.useMemo(() => {
+    const map = new Map<string, Property>();
+    properties.forEach((p) => map.set(p.id, p));
+    INITIAL_PROPERTIES.forEach((p) => {
+      if (!map.has(p.id)) map.set(p.id, p);
+    });
+    return Array.from(map.values());
+  }, [properties]);
+
+  const displayedProperties = React.useMemo(() => {
+    if (portfolioView === "MY_LISTINGS") {
+      return myListedProperties;
+    }
+    if (portfolioView === "ACCREDITED") {
+      return accreditedProperties;
+    }
+    return allPropertiesCombined;
+  }, [portfolioView, myListedProperties, accreditedProperties, allPropertiesCombined]);
 
   const form = useForm<CreatePropertyInput>({
     resolver: zodResolver(CreatePropertyInputSchema),
@@ -181,6 +228,8 @@ export default function PropertiesPage() {
   const onSubmitNewProperty = (values: CreatePropertyInput) => {
     const created = addProperty({
       ...values,
+      listedByAgentId: user?.uid,
+      listedByAgentName: agentProfile?.fullName || "Agent",
       galleryImages:
         values.galleryImages && values.galleryImages.length > 0
           ? values.galleryImages
@@ -189,7 +238,7 @@ export default function PropertiesPage() {
           : [],
     });
     toast.success(
-      `Added ${created.projectName} (${created.unitCode}) to inventory!`
+      `Added ${created.projectName} (${created.unitCode}) to your exclusive listings!`
     );
     setIsAddOpen(false);
     setUploadedPhotoPreview(null);
@@ -291,6 +340,8 @@ export default function PropertiesPage() {
                 "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
             ],
             videoWalkthroughUrl: row.videoWalkthroughUrl?.trim() || undefined,
+            listedByAgentId: user?.uid,
+            listedByAgentName: agentProfile?.fullName || undefined,
           }));
 
           if (parsedInputs.length === 0) {
@@ -802,12 +853,71 @@ export default function PropertiesPage() {
         </div>
       </div>
 
+      {/* Scope Filtering: My Listed Properties vs Accredited Inventory vs All */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={portfolioView === "MY_LISTINGS" ? "default" : "outline"}
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => setPortfolioView("MY_LISTINGS")}
+          >
+            <UserCheck className="h-3.5 w-3.5" />
+            <span>My Listed Properties</span>
+            <Badge
+              variant={portfolioView === "MY_LISTINGS" ? "secondary" : "outline"}
+              className="ml-1 h-4 px-1.5 text-[10px]"
+            >
+              {myListedProperties.length}
+            </Badge>
+          </Button>
+
+          <Button
+            variant={portfolioView === "ACCREDITED" ? "default" : "outline"}
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => setPortfolioView("ACCREDITED")}
+          >
+            <Building2 className="h-3.5 w-3.5" />
+            <span>Accredited Developer Masterlist</span>
+            <Badge
+              variant={portfolioView === "ACCREDITED" ? "secondary" : "outline"}
+              className="ml-1 h-4 px-1.5 text-[10px]"
+            >
+              {accreditedProperties.length}
+            </Badge>
+          </Button>
+
+          <Button
+            variant={portfolioView === "ALL" ? "default" : "outline"}
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => setPortfolioView("ALL")}
+          >
+            <span>All Inventory</span>
+            <Badge
+              variant={portfolioView === "ALL" ? "secondary" : "outline"}
+              className="ml-1 h-4 px-1.5 text-[10px]"
+            >
+              {allPropertiesCombined.length}
+            </Badge>
+          </Button>
+        </div>
+
+        {user && (
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5 text-pipeline-won shrink-0" />
+            Isolated workspace for: <strong className="text-foreground">{agentProfile?.fullName || user.email}</strong>
+          </span>
+        )}
+      </div>
+
       <Tabs defaultValue="cards" className="space-y-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <TabsList className="h-9">
             <TabsTrigger value="cards" className="text-xs gap-1.5">
               <LayoutGrid className="h-3.5 w-3.5" />
-              Unit Cards ({properties.length})
+              Unit Cards ({displayedProperties.length})
             </TabsTrigger>
             <TabsTrigger value="stacking" className="text-xs gap-1.5">
               <Grid3X3 className="h-3.5 w-3.5 text-primary" />
@@ -833,120 +943,170 @@ export default function PropertiesPage() {
 
         {/* TAB 1: INVENTORY CARDS */}
         <TabsContent value="cards" className="mt-0">
-          <div className="grid gap-4 md:grid-cols-2">
-            {properties.map((prop) => (
-              <Card key={prop.id} className="flex flex-col justify-between overflow-hidden">
-                <CardHeader className="p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <Badge
-                        variant={
-                          prop.status === "AVAILABLE"
-                            ? "won"
-                            : prop.status === "SOLD"
-                            ? "secondary"
-                            : "reservation"
-                        }
-                        className="text-[10px]"
-                      >
-                        {prop.status.replace(/_/g, " ")}
-                      </Badge>
-                      <select
-                        aria-label="Update unit status"
-                        value={prop.status}
-                        onChange={(e) => {
-                          const nextStatus = e.target.value as Property["status"];
-                          updatePropertyStatus(prop.id, nextStatus);
-                          toast.success(
-                            `${prop.unitCode} status updated to ${nextStatus}`
-                          );
-                        }}
-                        className="h-6 rounded border bg-background px-1.5 text-[10px] font-medium text-muted-foreground focus:outline-none"
-                      >
-                        <option value="AVAILABLE">Set Available</option>
-                        <option value="ON_HOLD">Set On Hold</option>
-                        <option value="RESERVED">Set Reserved</option>
-                        <option value="SOLD">Set Sold</option>
-                      </select>
-                    </div>
-                    <span className="text-xs font-medium text-muted-foreground">
-                      {prop.turnoverDate}
-                    </span>
-                  </div>
-                  <CardTitle className="mt-2 text-base font-bold">
-                    {prop.projectName}
-                  </CardTitle>
-                  <CardDescription className="text-xs flex items-center gap-1">
-                    <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
-                    {prop.unitCode} • {prop.locationCity}
-                  </CardDescription>
-                </CardHeader>
+          {displayedProperties.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed bg-muted/20 p-12 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary mb-3">
+                <Building2 className="h-6 w-6" />
+              </div>
+              <h3 className="text-base font-semibold">No Listed Properties Yet</h3>
+              <p className="max-w-md text-xs text-muted-foreground mt-1 mb-4">
+                {agentProfile?.fullName || "You"} haven&apos;t added any exclusive property listings to your agent account. Add your direct listings or import units via CSV to manage them here.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setIsAddOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Your First Listing
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setIsBulkOpen(true)}>
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
+                  Bulk Import CSV
+                </Button>
+                <Button variant="secondary" size="sm" className="h-8 text-xs gap-1.5" onClick={() => setPortfolioView("ACCREDITED")}>
+                  <Building2 className="h-3.5 w-3.5" />
+                  Browse Developer Masterlist
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {displayedProperties.map((prop) => (
+                <Card key={prop.id} className="flex flex-col justify-between overflow-hidden">
+                  <CardHeader className="p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Badge
+                          variant={
+                            prop.status === "AVAILABLE"
+                              ? "won"
+                              : prop.status === "SOLD"
+                              ? "secondary"
+                              : "reservation"
+                          }
+                          className="text-[10px]"
+                        >
+                          {prop.status.replace(/_/g, " ")}
+                        </Badge>
 
-                <CardContent className="p-4 pt-0 space-y-3">
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-y py-2.5">
-                    <span className="flex items-center gap-1">
-                      <Maximize2 className="h-3.5 w-3.5 text-foreground" />
-                      {prop.floorAreaSqm} sqm Floor
-                    </span>
-                    {prop.lotAreaSqm > 0 && (
-                      <span>• {prop.lotAreaSqm} sqm Lot</span>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <BedDouble className="h-3.5 w-3.5 text-foreground" />
-                      {prop.bedrooms} BR
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Bath className="h-3.5 w-3.5 text-foreground" />
-                      {prop.bathrooms} T&B
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Car className="h-3.5 w-3.5 text-foreground" />
-                      {prop.parkingSlots} Parking
-                    </span>
-                  </div>
+                        {prop.listedByAgentId === user?.uid ? (
+                          <Badge variant="won" className="text-[9px] gap-1">
+                            <UserCheck className="h-2.5 w-2.5" />
+                            My Listing
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px]">
+                            Accredited Master
+                          </Badge>
+                        )}
 
-                  <div className="flex items-baseline justify-between">
-                    <div>
-                      <span className="text-[11px] text-muted-foreground block">
-                        Total List Price
-                      </span>
-                      <span className="text-lg font-bold tabular-nums">
-                        {formatCurrency(prop.listPrice, "PHP", 0)}
+                        <select
+                          aria-label="Update unit status"
+                          value={prop.status}
+                          onChange={(e) => {
+                            const nextStatus = e.target.value as Property["status"];
+                            updatePropertyStatus(prop.id, nextStatus);
+                            toast.success(
+                              `${prop.unitCode} status updated to ${nextStatus}`
+                            );
+                          }}
+                          className="h-6 rounded border bg-background px-1.5 text-[10px] font-medium text-muted-foreground focus:outline-none"
+                        >
+                          <option value="AVAILABLE">Set Available</option>
+                          <option value="ON_HOLD">Set On Hold</option>
+                          <option value="RESERVED">Set Reserved</option>
+                          <option value="SOLD">Set Sold</option>
+                        </select>
+                      </div>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {prop.turnoverDate}
                       </span>
                     </div>
-                    <div className="text-right">
-                      <span className="text-[11px] text-muted-foreground block">
-                        Reservation Fee
+                    <CardTitle className="mt-2 text-base font-bold">
+                      {prop.projectName}
+                    </CardTitle>
+                    <CardDescription className="text-xs flex items-center gap-1">
+                      <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                      {prop.unitCode} • {prop.locationCity}
+                    </CardDescription>
+                  </CardHeader>
+
+                  <CardContent className="p-4 pt-0 space-y-3">
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-y py-2.5">
+                      <span className="flex items-center gap-1">
+                        <Maximize2 className="h-3.5 w-3.5 text-foreground" />
+                        {prop.floorAreaSqm} sqm Floor
                       </span>
-                      <span className="text-sm font-semibold tabular-nums">
-                        {formatCurrency(prop.reservationFee, "PHP", 0)}
+                      {prop.lotAreaSqm > 0 && (
+                        <span>• {prop.lotAreaSqm} sqm Lot</span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <BedDouble className="h-3.5 w-3.5 text-foreground" />
+                        {prop.bedrooms} BR
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Bath className="h-3.5 w-3.5 text-foreground" />
+                        {prop.bathrooms} T&B
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Car className="h-3.5 w-3.5 text-foreground" />
+                        {prop.parkingSlots} Parking
                       </span>
                     </div>
-                  </div>
-                </CardContent>
 
-                <CardFooter className="grid grid-cols-2 gap-2 p-4 pt-0">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs gap-1.5"
-                    asChild
-                  >
-                    <Link href={`/showcase?propertyId=${prop.id}`}>
-                      <Film className="h-3.5 w-3.5 text-primary" />
-                      Photos & Video
-                    </Link>
-                  </Button>
-                  <Button size="sm" className="w-full text-xs gap-1.5" asChild>
-                    <Link href={`/quotations?propertyId=${prop.id}`}>
-                      <Calculator className="h-3.5 w-3.5" />
-                      Compute Quote
-                    </Link>
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
+                    <div className="flex items-baseline justify-between">
+                      <div>
+                        <span className="text-[11px] text-muted-foreground block">
+                          Total List Price
+                        </span>
+                        <span className="text-lg font-bold tabular-nums">
+                          {formatCurrency(prop.listPrice, "PHP", 0)}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[11px] text-muted-foreground block">
+                          Reservation Fee
+                        </span>
+                        <span className="text-sm font-semibold tabular-nums">
+                          {formatCurrency(prop.reservationFee, "PHP", 0)}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+
+                  <CardFooter className="grid grid-cols-3 gap-2 p-4 pt-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-[11px] px-2 gap-1"
+                      asChild
+                    >
+                      <Link href={`/showcase?propertyId=${prop.id}`}>
+                        <Film className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span className="truncate">Media Tour</span>
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-[11px] px-2 gap-1 text-primary hover:text-primary"
+                      onClick={() => {
+                        setSelectedSocialProperty(prop);
+                        setIsSocialModalOpen(true);
+                      }}
+                    >
+                      <Share2 className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">Social Card</span>
+                    </Button>
+                    <Button size="sm" className="w-full text-[11px] px-2 gap-1" asChild>
+                      <Link href={`/quotations?propertyId=${prop.id}`}>
+                        <Calculator className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">Compute</span>
+                      </Link>
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         {/* TAB 2: INTERACTIVE TOWER / BLOCK-LOT STACKING PLAN */}
@@ -1163,6 +1323,16 @@ export default function PropertiesPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* 1080x1080 Luxury Social Media Card Generator Modal */}
+      <SocialShareCardModal
+        property={selectedSocialProperty}
+        isOpen={isSocialModalOpen}
+        onClose={() => {
+          setIsSocialModalOpen(false);
+          setSelectedSocialProperty(null);
+        }}
+      />
     </div>
   );
 }

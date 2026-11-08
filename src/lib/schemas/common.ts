@@ -47,6 +47,8 @@ export const PropertySchema = z.object({
   thumbnailUrl: z.string().url().optional(),
   galleryImages: z.array(z.string().url()).default([]),
   videoWalkthroughUrl: z.string().url().optional().or(z.literal("")),
+  listedByAgentId: z.string().optional().nullable(),
+  listedByAgentName: z.string().optional().nullable(),
   createdAt: z.coerce.date(),
 });
 

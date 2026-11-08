@@ -1,17 +1,23 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
 import {
   Building2,
   KeyRound,
   LogIn,
   ShieldCheck,
   UserPlus,
+  ArrowLeft,
+  Sun,
+  Moon,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { Button } from "@/components/ui/button";
@@ -56,6 +62,7 @@ type RegisterInput = z.infer<typeof RegisterSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
   const { signInWithEmail, registerAgent, signInWithGoogle, user } = useAuth();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -134,8 +141,52 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="container flex min-h-[calc(100vh-4rem)] items-center justify-center py-8">
-      <div className="grid w-full max-w-4xl gap-6 lg:grid-cols-12 items-center">
+    <div className="min-h-screen w-full bg-background flex flex-col">
+      {/* Standalone Quiet Luxury Brand Header */}
+      <header className="border-b bg-card/60 backdrop-blur px-4 sm:px-8 py-3.5 flex items-center justify-between">
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+            <Building2 className="h-4 w-4" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-base font-serif font-normal tracking-tight leading-none">
+              PropFlow
+            </span>
+            <span className="text-[9px] font-sans font-medium uppercase tracking-widest text-muted-foreground mt-0.5">
+              Estates &amp; Advisory
+            </span>
+          </div>
+        </Link>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
+            <Link href="/showcase">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Back to</span> Showcase
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
+            <Link href="/inquire">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span>Client Portal</span>
+            </Link>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            aria-label="Toggle theme"
+          >
+            <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          </Button>
+        </div>
+      </header>
+
+      {/* Main Authentication Card */}
+      <main className="flex-1 flex items-center justify-center p-4 sm:p-8">
+        <div className="grid w-full max-w-4xl gap-8 lg:grid-cols-12 items-center">
         {/* Left Branding & Value Prop Panel */}
         <div className="space-y-4 lg:col-span-5">
           <div className="inline-flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
@@ -385,7 +436,8 @@ export default function LoginPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </main>
+  </div>
   );
 }
 
