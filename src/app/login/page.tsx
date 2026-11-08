@@ -132,9 +132,48 @@ export default function LoginPage() {
       toast.success("Signed in with Google!");
       router.push("/pipeline");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Google Sign-In failed";
-      toast.error(message);
+      const err = error as { code?: string; message?: string };
+      if (err?.code === "auth/unauthorized-domain") {
+        const currentHostname =
+          typeof window !== "undefined" ? window.location.hostname : "current domain";
+        toast.error(
+          `Domain "${currentHostname}" is not authorized in Firebase Console. If accessing via 127.0.0.1, switch your browser URL to http://localhost:3000/login or add "${currentHostname}" in Firebase Console > Authentication > Settings > Authorized Domains.`,
+          { duration: 10000 }
+        );
+      } else if (err?.code === "auth/popup-closed-by-user") {
+        toast.info("Google Sign-In popup was closed before completing.");
+      } else {
+        const message =
+          error instanceof Error ? error.message : "Google Sign-In failed";
+        toast.error(message);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDemoSignIn = async () => {
+    try {
+      setIsSubmitting(true);
+      await signInWithEmail("marco.reyes@propflow.ph", "PropFlow2026!");
+      toast.success("Signed in with Demo Broker Account (Marco Reyes)!");
+      router.push("/pipeline");
+    } catch {
+      try {
+        await registerAgent({
+          fullName: "Marco Reyes, REB",
+          email: "marco.reyes@propflow.ph",
+          password: "PropFlow2026!",
+          phone: "+63 917 880 1122",
+          role: "BROKER",
+          prcLicenseNumber: "PRC #0031842",
+          agencyName: "PropFlow Realty Group",
+        });
+        toast.success("Demo Broker Account registered & signed in!");
+        router.push("/pipeline");
+      } catch {
+        toast.error("Could not sign in with demo broker credentials.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -426,12 +465,44 @@ export default function LoginPage() {
               <Button
                 type="button"
                 variant="outline"
-                className="w-full text-xs h-9"
+                className="w-full text-xs h-9 gap-2"
                 disabled={isSubmitting}
                 onClick={handleGoogleLogin}
               >
+                <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#EA4335"
+                    d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.5 1.9 7.1l3.7 2.8C6.5 7.1 9 5 12 5z"
+                  />
+                  <path
+                    fill="#4285F4"
+                    d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.8c2.2-2 3.7-5 3.7-8.7z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.6 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.4.4-2.1L1.9 7.1C.7 9.5 0 10.7 0 12s.7 2.5 1.9 4.9l3.7-2.8z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.8c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.1-6.4-4.9L1.9 16.3C3.7 20.3 7.5 23 12 23z"
+                  />
+                </svg>
                 Continue with Google Workspace
               </Button>
+
+              <div className="pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="w-full text-xs h-8 gap-1.5 border border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary"
+                  disabled={isSubmitting}
+                  onClick={handleDemoSignIn}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Instant Sign-In with Demo Broker Account
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
