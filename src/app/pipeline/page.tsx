@@ -359,8 +359,8 @@ export default function PipelinePage() {
       {/* Header & Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg font-bold tracking-tight sm:text-xl">
-            Lead Pipeline & Deal Flow
+          <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
+            Lead Pipeline &amp; Deal Flow
           </h1>
           <p className="text-xs text-muted-foreground">
             Drag cards across stages or tap any buyer to inspect KYC docs, tripping notes, and quotations.

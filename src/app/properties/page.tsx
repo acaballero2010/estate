@@ -418,11 +418,11 @@ export default function PropertiesPage() {
     <div className="container space-y-6 py-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg font-bold tracking-tight sm:text-xl">
-            Accredited Property & Unit Inventory
+          <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
+            Accredited Property &amp; Unit Inventory
           </h1>
           <p className="text-xs text-muted-foreground">
-            Manage pre-selling & RFO units, inspect the interactive tower stacking plan, and launch customized quotations.
+            Manage pre-selling &amp; RFO units, inspect the interactive tower stacking plan, and launch customized quotations.
           </p>
         </div>
 

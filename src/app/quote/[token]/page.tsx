@@ -422,7 +422,7 @@ function BuyerQuotationPortalContent() {
         <CardHeader className="border-b bg-muted/30 p-5">
           <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
             <div>
-              <CardTitle className="text-xl font-bold">
+              <CardTitle className="text-2xl font-serif font-normal tracking-tight sm:text-3xl">
                 {liveInput.projectName}
               </CardTitle>
               <CardDescription className="text-xs font-medium text-foreground mt-0.5">
@@ -506,7 +506,7 @@ function BuyerQuotationPortalContent() {
               <span className="text-xs text-muted-foreground block">
                 Total Contract Price (TCP)
               </span>
-              <span className="text-lg font-bold tabular-nums">
+              <span className="text-xl sm:text-2xl font-serif font-normal tabular-nums block text-foreground">
                 {formatCurrency(result.totalContractPrice)}
               </span>
               {selectedCurrency !== "PHP" && (
@@ -531,7 +531,7 @@ function BuyerQuotationPortalContent() {
                   </Badge>
                 )}
               </div>
-              <span className="text-xl font-bold text-primary tabular-nums">
+              <span className="text-xl sm:text-2xl font-serif font-normal text-primary tabular-nums block">
                 {isStepUp && result.downPaymentSchedule[0]
                   ? `Starts at ${formatCurrency(result.downPaymentSchedule[0].amountDue)}`
                   : formatCurrency(result.monthlyDownPayment)}
@@ -560,7 +560,7 @@ function BuyerQuotationPortalContent() {
               <span className="text-xs text-muted-foreground block">
                 Monthly Bank/HDMF Loan ({selectedTenor} yrs)
               </span>
-              <span className="text-lg font-bold tabular-nums">
+              <span className="text-xl sm:text-2xl font-serif font-normal tabular-nums block text-foreground">
                 {formatCurrency(result.monthlyAmortization)}
               </span>
               {selectedCurrency !== "PHP" && (

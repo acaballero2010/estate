@@ -312,8 +312,8 @@ function QuotationCalculatorContent() {
       {/* Top Action Bar */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div>
-          <h1 className="text-lg font-bold tracking-tight sm:text-xl">
-            Real Estate Quotation & Amortization Calculator
+          <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
+            Real Estate Quotation &amp; Amortization Calculator
           </h1>
           <p className="text-xs text-muted-foreground">
             Generate sample computations for Bank, Pag-IBIG HDMF, or In-House financing and export branded PDF sheets.
@@ -741,7 +741,7 @@ function QuotationCalculatorContent() {
                   <span className="text-[11px] text-muted-foreground block">
                     Total Contract Price (TCP)
                   </span>
-                  <span className="text-base font-bold tabular-nums">
+                  <span className="text-xl sm:text-2xl font-serif font-normal tabular-nums block text-foreground">
                     {formatCurrency(result.totalContractPrice)}
                   </span>
                   {selectedCurrency !== "PHP" && (
@@ -765,7 +765,7 @@ function QuotationCalculatorContent() {
                       </Badge>
                     )}
                   </div>
-                  <span className="text-lg font-bold text-primary tabular-nums">
+                  <span className="text-xl sm:text-2xl font-serif font-normal text-primary tabular-nums block">
                     {watchedValues.isStepUpEquity && result.downPaymentSchedule[0]
                       ? `Starts at ${formatCurrency(result.downPaymentSchedule[0].amountDue)}`
                       : formatCurrency(result.monthlyDownPayment)}
@@ -794,7 +794,7 @@ function QuotationCalculatorContent() {
                   <span className="text-[11px] text-muted-foreground block">
                     Est. Monthly Loan ({watchedValues.loanTenorYears} yrs)
                   </span>
-                  <span className="text-base font-bold tabular-nums">
+                  <span className="text-xl sm:text-2xl font-serif font-normal tabular-nums block text-foreground">
                     {formatCurrency(result.monthlyAmortization)}
                   </span>
                   {selectedCurrency !== "PHP" && (

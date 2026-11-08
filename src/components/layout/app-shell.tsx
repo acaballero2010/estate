@@ -173,9 +173,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             {!isCollapsed && (
               <div className="flex flex-col">
-                <span className="text-sm font-bold leading-none">PropFlow</span>
-                <span className="text-[10px] font-medium text-muted-foreground">
-                  Real Estate CRM
+                <span className="text-base font-serif font-normal tracking-tight leading-none">
+                  PropFlow
+                </span>
+                <span className="text-[9px] font-sans font-medium uppercase tracking-widest text-muted-foreground mt-0.5">
+                  Estates &amp; Advisory
                 </span>
               </div>
             )}
@@ -316,9 +318,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <Building2 className="h-4 w-4" />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-sm font-bold">PropFlow CRM</span>
-                    <span className="text-[10px] text-muted-foreground">
-                      Sales Enablement Suite
+                    <span className="text-base font-serif font-normal tracking-tight leading-none">
+                      PropFlow
+                    </span>
+                    <span className="text-[9px] font-sans font-medium uppercase tracking-widest text-muted-foreground mt-0.5">
+                      Estates &amp; Advisory
                     </span>
                   </div>
                 </div>

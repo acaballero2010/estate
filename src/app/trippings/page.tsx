@@ -165,8 +165,8 @@ export default function TrippingsPage() {
     <div className="container space-y-6 py-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-lg font-bold tracking-tight sm:text-xl">
-            Site Tripping & Showroom Viewing Scheduler
+          <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
+            Site Tripping &amp; Showroom Viewing Scheduler
           </h1>
           <p className="text-xs text-muted-foreground">
             Coordinate buyer site visits, send Messenger gate passes, and export `.ics` calendar invites.

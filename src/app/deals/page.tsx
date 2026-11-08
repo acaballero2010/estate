@@ -61,8 +61,8 @@ export default function DealsPage() {
   return (
     <div className="container space-y-6 py-6">
       <div>
-        <h1 className="text-lg font-bold tracking-tight sm:text-xl">
-          Deal Rooms, Closing Checklists & Commission Tracker
+        <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
+          Deal Rooms, Closing Checklists &amp; Commission Tracker
         </h1>
         <p className="text-xs text-muted-foreground">
           Monitor unit reservations, verify buyer loan takeout requirements, and track net commission disbursements.
@@ -74,9 +74,9 @@ export default function DealsPage() {
         <Card className="shadow-none">
           <CardHeader className="p-4 pb-1">
             <CardDescription className="text-xs">
-              Closed & Reserved TCP Volume
+              Closed &amp; Reserved TCP Volume
             </CardDescription>
-            <CardTitle className="text-lg font-bold tabular-nums sm:text-2xl">
+            <CardTitle className="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground tabular-nums">
               {formatCompactCurrency(summary.totalTcp)}
             </CardTitle>
           </CardHeader>
@@ -92,7 +92,7 @@ export default function DealsPage() {
             <CardDescription className="text-xs">
               Total Projected Net Commission
             </CardDescription>
-            <CardTitle className="text-lg font-bold tabular-nums sm:text-2xl">
+            <CardTitle className="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-foreground tabular-nums">
               {formatCurrency(summary.netProjected, "PHP", 0)}
             </CardTitle>
           </CardHeader>
@@ -108,7 +108,7 @@ export default function DealsPage() {
             <CardDescription className="text-xs">
               Collected Commission YTD
             </CardDescription>
-            <CardTitle className="text-lg font-bold text-pipeline-won tabular-nums sm:text-2xl">
+            <CardTitle className="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-pipeline-won tabular-nums">
               {formatCurrency(summary.collected, "PHP", 0)}
             </CardTitle>
           </CardHeader>
@@ -124,7 +124,7 @@ export default function DealsPage() {
             <CardDescription className="text-xs">
               Pending / Collectible Balance
             </CardDescription>
-            <CardTitle className="text-lg font-bold text-pipeline-proposal tabular-nums sm:text-2xl">
+            <CardTitle className="text-2xl sm:text-3xl font-serif font-normal tracking-tight text-pipeline-proposal tabular-nums">
               {formatCurrency(summary.remaining, "PHP", 0)}
             </CardTitle>
           </CardHeader>

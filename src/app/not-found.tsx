@@ -8,7 +8,7 @@ export default function NotFound() {
       <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary mb-4">
         <Building2 className="h-6 w-6" />
       </div>
-      <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+      <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
         Page or Property Unit Not Found
       </h1>
       <p className="mt-1.5 max-w-md text-xs text-muted-foreground sm:text-sm">

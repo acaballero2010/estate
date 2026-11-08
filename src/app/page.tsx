@@ -77,7 +77,7 @@ export default function HomePage() {
     <div className="container space-y-6 py-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+          <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
             Sales Enablement Command Center
           </h1>
           <p className="text-xs text-muted-foreground sm:text-sm">
@@ -113,7 +113,7 @@ export default function HomePage() {
             <CardDescription className="text-xs font-medium">
               Active Pipeline Value
             </CardDescription>
-            <CardTitle className="text-lg font-bold tabular-nums sm:text-2xl">
+            <CardTitle className="text-2xl font-serif font-normal tracking-tight text-foreground tabular-nums sm:text-3xl">
               {formatCompactCurrency(liveMetrics.activePipelineValue)}
             </CardTitle>
           </CardHeader>
@@ -129,7 +129,7 @@ export default function HomePage() {
             <CardDescription className="text-xs font-medium">
               Messenger Lead Threads
             </CardDescription>
-            <CardTitle className="text-lg font-bold tabular-nums sm:text-2xl">
+            <CardTitle className="text-2xl font-serif font-normal tracking-tight text-foreground tabular-nums sm:text-3xl">
               {liveMetrics.activeThreads} Threads
             </CardTitle>
           </CardHeader>
@@ -145,7 +145,7 @@ export default function HomePage() {
             <CardDescription className="text-xs font-medium">
               Available Units & Proposals
             </CardDescription>
-            <CardTitle className="text-lg font-bold tabular-nums sm:text-2xl">
+            <CardTitle className="text-2xl font-serif font-normal tracking-tight text-foreground tabular-nums sm:text-3xl">
               {liveMetrics.availableUnits} Units Ready
             </CardTitle>
           </CardHeader>
@@ -161,7 +161,7 @@ export default function HomePage() {
             <CardDescription className="text-xs font-medium">
               Projected Net Commission
             </CardDescription>
-            <CardTitle className="text-lg font-bold tabular-nums sm:text-2xl">
+            <CardTitle className="text-2xl font-serif font-normal tracking-tight text-foreground tabular-nums sm:text-3xl">
               {formatCompactCurrency(liveMetrics.projectedCommission)}
             </CardTitle>
           </CardHeader>

@@ -271,10 +271,10 @@ function ShowcaseStorefrontContent() {
       <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/15 via-background to-secondary/40 p-6 sm:p-8">
         <div className="max-w-2xl space-y-3">
           <Badge variant="new" className="gap-1.5 text-xs">
-            <Sparkles className="h-3.5 w-3.5" /> Interactive Property Storefront & Virtual Tours
+            <Sparkles className="h-3.5 w-3.5" /> Interactive Property Storefront &amp; Virtual Tours
           </Badge>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Explore Model Units, Architectural Photos & Video Walkthroughs
+          <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
+            Explore Model Units, Architectural Photos &amp; Video Walkthroughs
           </h1>
           <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
             Tour our accredited Condominiums, Executive Villages, and Townhomes in high-definition. Watch virtual model unit walkthroughs and unlock instant monthly equity computations.
@@ -467,11 +467,11 @@ function ShowcaseStorefrontContent() {
                   <Badge variant="new" className="text-[10px]">
                     {selectedProperty.developerName}
                   </Badge>
-                  <span className="text-sm font-bold text-primary tabular-nums">
+                  <span className="text-base font-serif font-normal text-primary tabular-nums">
                     {formatCurrency(selectedProperty.listPrice, "PHP", 0)}
                   </span>
                 </div>
-                <DialogTitle className="text-lg font-bold">
+                <DialogTitle className="text-xl font-serif font-normal tracking-tight">
                   {selectedProperty.projectName} — {selectedProperty.unitCode}
                 </DialogTitle>
                 <DialogDescription className="text-xs">

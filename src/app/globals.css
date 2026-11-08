@@ -128,5 +128,14 @@
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
+  /* Quiet Luxury / Editorial FinTech Typography */
+  .font-editorial {
+    font-family: var(--font-serif), "Instrument Serif", "Source Serif 4", Georgia, serif;
+    font-style: italic;
+  }
+  .font-serif-kpi {
+    font-family: var(--font-serif), "Instrument Serif", "Source Serif 4", Georgia, serif;
+    letter-spacing: -0.025em;
+  }
 }
 
