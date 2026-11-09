@@ -5,17 +5,14 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Calendar,
   CalendarCheck,
   CalendarPlus,
   CheckCircle2,
   Clock,
-  Copy,
   Download,
   ExternalLink,
   MapPin,
   MessageSquare,
-  Phone,
   Search,
   Share2,
   Trash2,

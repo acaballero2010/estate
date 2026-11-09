@@ -4,23 +4,18 @@ import * as React from "react";
 import Papa from "papaparse";
 import { toast } from "sonner";
 import {
-  AlertCircle,
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
   Download,
   FileSpreadsheet,
   FileText,
-  Filter,
-  HelpCircle,
   Loader2,
   Megaphone,
   RefreshCw,
-  Sparkles,
+  ShieldCheck,
   Upload,
   UserCheck,
-  Users,
-  X,
 } from "lucide-react";
 
 import { useCrmStore } from "@/lib/store/crm-store";
@@ -34,10 +29,8 @@ import {
   getSampleCsvTemplate,
 } from "@/lib/lead-csv-parser";
 import {
-  PIPELINE_STAGE_LABELS,
   type CreateLeadInput,
   type PipelineStage,
-  type PropertyType,
 } from "@/lib/schemas/lead";
 import { formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -245,7 +238,7 @@ export function BulkLeadImportModal({ open, onOpenChange }: BulkLeadImportModalP
       setImportedCount(toImport.length);
       setStep("SUCCESS");
       toast.success(`Successfully imported ${toImport.length} leads into pipeline!`);
-    } catch (err) {
+    } catch {
       toast.error("Failed to import leads into CRM. Please try again.");
     } finally {
       setIsImporting(false);
@@ -357,7 +350,7 @@ export function BulkLeadImportModal({ open, onOpenChange }: BulkLeadImportModalP
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <Sparkles className="h-4 w-4 text-purple-600" />
+                    <ShieldCheck className="h-4 w-4 text-purple-600" />
                     <span className="text-xs font-semibold text-foreground">PropFlow Standard</span>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">

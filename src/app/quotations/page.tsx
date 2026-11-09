@@ -699,7 +699,7 @@ function QuotationCalculatorContent() {
               <Globe2 className="h-4 w-4 text-primary shrink-0" />
               <span className="text-xs font-semibold">Overseas &amp; OFW Currency:</span>
               <span className="text-[11px] text-muted-foreground hidden sm:inline">
-                Toggle rates to view in buyer's earning currency
+                Toggle rates to view in buyer&apos;s earning currency
               </span>
             </div>
             <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0 no-scrollbar -mx-1 px-1 w-full sm:w-auto">

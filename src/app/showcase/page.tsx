@@ -34,7 +34,6 @@ import {
   PlayCircle,
   RotateCcw,
   Ruler,
-  Activity,
   BarChart3,
   Search,
   Share2,
@@ -2393,7 +2392,7 @@ function ShowcaseStorefrontContent() {
                 </p>
                 {agentProfile?.bioHeadline && (
                   <p className="text-[11px] text-muted-foreground/90 italic pt-0.5 line-clamp-2">
-                    "{agentProfile.bioHeadline}"
+                    &ldquo;{agentProfile.bioHeadline}&rdquo;
                   </p>
                 )}
               </div>

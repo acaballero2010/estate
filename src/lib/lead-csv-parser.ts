@@ -188,6 +188,7 @@ export function mapFinancing(val: string | undefined | null): CreateLeadInput["f
  * Detects the best column mapping config based on CSV headers and an optional preset hint.
  */
 export function detectColumnMapping(headers: string[], presetHint: CsvPresetType = "AUTO_DETECT"): ColumnMappingConfig {
+  void presetHint;
   const mapping: ColumnMappingConfig = {};
   const lowerHeaders = headers.map((h) => ({ original: h, lower: h.trim().toLowerCase() }));
 

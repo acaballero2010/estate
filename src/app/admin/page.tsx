@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  ArrowUpRight,
   BarChart3,
   Building2,
   Check,
@@ -13,25 +12,16 @@ import {
   DollarSign,
   Download,
   Eye,
-  FileSpreadsheet,
-  Filter,
   Flame,
   Layers,
-  Lock,
-  MessageSquare,
   MoreHorizontal,
   RefreshCw,
   Search,
-  ShieldAlert,
   ShieldCheck,
   Sliders,
-  Sparkles,
   TrendingUp,
-  UserCheck,
   Users,
-  Wallet,
   X,
-  Zap,
 } from "lucide-react";
 
 import { useAuth, type AgentProfile } from "@/lib/firebase/auth-context";
@@ -47,7 +37,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -181,7 +170,7 @@ export default function PlatformAdminPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [tierFilter, setTierFilter] = React.useState<string>("ALL");
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
-  const [invoices, setInvoices] = React.useState<PlatformInvoice[]>(MOCK_PLATFORM_INVOICES);
+  const [invoices] = React.useState<PlatformInvoice[]>(MOCK_PLATFORM_INVOICES);
 
   // Platform Metrics
   const totalAgents = agents.length;

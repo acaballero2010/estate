@@ -5,29 +5,21 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  ArrowUp,
   Bath,
   Bed,
   Building2,
   Calculator,
-  CalendarCheck,
   CheckCircle2,
-  ChevronRight,
   Compass,
-  ExternalLink,
   Eye,
   FileCheck2,
   Film,
   Globe2,
   Layers,
-  LayoutDashboard,
   MapPin,
-  Maximize2,
-  Menu,
   MessageSquareText,
   ShieldCheck,
   TrendingUp,
-  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

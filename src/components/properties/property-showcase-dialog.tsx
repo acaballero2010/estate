@@ -21,12 +21,10 @@ import {
   RotateCcw,
   Ruler,
   ShoppingBag,
-  Sparkles,
   Ticket,
   Train,
   TrendingUp,
   Utensils,
-  X,
 } from "lucide-react";
 import type { Property } from "@/lib/schemas";
 import { PanoramaViewer } from "@/components/showcase/panorama-viewer";
@@ -258,7 +256,6 @@ export function PropertyShowcaseDialog({
   isClientView = true,
   onRequestVipPass,
   onBookViewing,
-  onCustomizeQuotation,
   onEditMedia,
 }: PropertyShowcaseDialogProps) {
   const [activePhotoIndex, setActivePhotoIndex] = React.useState(0);
@@ -272,7 +269,7 @@ export function PropertyShowcaseDialog({
       setActiveTab("photos");
       setSelectedHotspotId("living");
     }
-  }, [property?.id]);
+  }, [property]);
 
   if (!property) return null;
 
@@ -849,7 +846,7 @@ export function PropertyShowcaseDialog({
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <Film className="h-3.5 w-3.5" />
                   Open Full Showcase Tab
                   <ExternalLink className="h-3 w-3" />
                 </Link>

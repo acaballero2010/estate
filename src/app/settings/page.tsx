@@ -22,7 +22,6 @@ import {
   Loader2,
   Lock,
   Mail,
-  Medal,
   MessageSquareText,
   Phone,
   Plus,
@@ -30,16 +29,13 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
-  Sparkles,
   Trash2,
   Trophy,
   Unplug,
   UserCheck,
   Users,
   CreditCard,
-  DollarSign,
   Zap,
-  ArrowUpRight,
   X,
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/auth-context";
@@ -532,7 +528,7 @@ const PRESET_LICENSING_LOGOS = [
             <span>Financials</span>
           </TabsTrigger>
           <TabsTrigger value="automations" className="text-xs py-2 gap-1.5">
-            <Sparkles className="h-3.5 w-3.5" />
+            <Zap className="h-3.5 w-3.5" />
             <span>Automations</span>
           </TabsTrigger>
           <TabsTrigger value="system" className="text-xs py-2 gap-1.5">
@@ -1006,7 +1002,7 @@ const PRESET_LICENSING_LOGOS = [
                 <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-5 space-y-4 shadow-xl">
                   <div className="flex items-center justify-between border-b border-white/10 pb-3">
                     <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                      <Sparkles className="h-3.5 w-3.5" />
+                      <ShieldCheck className="h-3.5 w-3.5" />
                       Live Buyer Preview: Verified Consultant Credibility Seal
                     </span>
                     <Badge variant="outline" className="border-white/20 text-white text-[10px] bg-white/5">
@@ -1911,7 +1907,7 @@ const PRESET_LICENSING_LOGOS = [
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
+                <Zap className="h-4 w-4 text-primary" />
                 Pipeline &amp; Lead AI Automation
               </CardTitle>
               <CardDescription className="text-xs">

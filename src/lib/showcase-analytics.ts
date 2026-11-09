@@ -79,7 +79,7 @@ export async function recordShowcaseEvent(payload: {
       createdAt: new Date().toISOString(),
       timestamp: serverTimestamp(),
     });
-  } catch (err) {
+  } catch {
     // Non-blocking telemetry
     console.debug("Showcase analytics event logged locally:", payload.eventType);
   }

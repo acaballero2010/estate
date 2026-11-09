@@ -24,7 +24,7 @@ export const DEFAULT_PROPERTY_FALLBACK_IMAGE: string =
  */
 export function normalizeCloudImageUrl(rawUrl: string): string {
   if (!rawUrl || typeof rawUrl !== "string") return rawUrl;
-  let url = rawUrl.trim();
+  const url = rawUrl.trim();
 
   // 1. Google Drive:
   // e.g. https://drive.google.com/file/d/1XyZ123abc456/view?usp=sharing

@@ -110,7 +110,7 @@ function BuyerQuotationPortalContent() {
     addTripping,
     messengerSettings,
   } = useCrmStore();
-  const { agentProfile, loading: authLoading } = useAuth();
+  const { agentProfile } = useAuth();
   const [isMounted, setIsMounted] = React.useState(false);
   const [publicAgentProfile, setPublicAgentProfile] =
     React.useState<AgentProfile | null>(null);
@@ -2154,7 +2154,7 @@ function BuyerQuotationPortalContent() {
                 </p>
                 {effectiveAgent?.bioHeadline && (
                   <p className="text-[11px] text-muted-foreground/90 italic pt-0.5 line-clamp-2">
-                    "{effectiveAgent.bioHeadline}"
+                    &ldquo;{effectiveAgent.bioHeadline}&rdquo;
                   </p>
                 )}
               </div>

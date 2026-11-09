@@ -4,13 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
-  Building2,
-  CheckCircle2,
-  CreditCard,
-  FileCheck2,
   FileSignature,
   Lock,
-  Receipt,
   UserCheck,
 } from "lucide-react";
 import type { Lead, Property } from "@/lib/schemas";
@@ -97,7 +92,6 @@ export function ConvertLeadToDealModal({
 
     setIsSubmitting(true);
     try {
-      const selectedProp = properties.find((p) => p.id === selectedPropertyId);
       const matchingQuote = quotations.find(
         (q) => q.leadId === lead.id && q.propertyId === selectedPropertyId
       );
