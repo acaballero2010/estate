@@ -26,6 +26,7 @@ import {
   Loader2,
   MapPin,
   Maximize2,
+  Pencil,
   PlayCircle,
   Plus,
   Share2,
@@ -44,6 +45,7 @@ import { useAuth } from "@/lib/firebase/auth-context";
 import { uploadMediaFile } from "@/lib/firebase/storage-upload";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { SocialShareCardModal } from "@/components/marketing/social-share-card-modal";
+import { EditPropertyModal } from "@/components/properties/edit-property-modal";
 import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { getSafePropertyImageUrl } from "@/lib/property-images";
 import { Badge } from "@/components/ui/badge";
@@ -97,7 +99,16 @@ const DEFAULT_TOWER_FLOORS = [
 export default function PropertiesPage() {
   const router = useRouter();
   const { user, agentProfile } = useAuth();
-  const { properties, addProperty, bulkAddProperties, updatePropertyStatus } = useCrmStore();
+  const {
+    properties,
+    addProperty,
+    bulkAddProperties,
+    updateProperty,
+    updatePropertyStatus,
+    deleteProperty,
+  } = useCrmStore();
+  const [editingProperty, setEditingProperty] = React.useState<Property | null>(null);
+  const [isEditOpen, setIsEditOpen] = React.useState(false);
   const [isAddOpen, setIsAddOpen] = React.useState(false);
   const [isBulkOpen, setIsBulkOpen] = React.useState(false);
   const [isParsingCsv, setIsParsingCsv] = React.useState(false);
@@ -262,6 +273,19 @@ export default function PropertiesPage() {
     if (openQuoteAfterSave) {
       router.push(`/quotations?propertyId=${created.id}`);
     }
+  };
+
+  const handleOpenEdit = (prop: Property) => {
+    setEditingProperty(prop);
+    setIsEditOpen(true);
+  };
+
+  const handleSaveEdit = (propertyId: string, values: CreatePropertyInput) => {
+    updateProperty(propertyId, values);
+  };
+
+  const handleDeleteProperty = (propertyId: string) => {
+    deleteProperty(propertyId);
   };
 
   const handleDownloadCsvTemplate = () => {
@@ -1203,9 +1227,20 @@ export default function PropertiesPage() {
                           <option value="SOLD">Set Sold</option>
                         </select>
                       </div>
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {prop.turnoverDate}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {prop.turnoverDate}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground hover:bg-muted"
+                          onClick={() => handleOpenEdit(prop)}
+                          title="Edit Property Listing"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                     <CardTitle className="mt-2 text-base font-bold">
                       {prop.projectName}
@@ -1259,34 +1294,43 @@ export default function PropertiesPage() {
                     </div>
                   </CardContent>
 
-                  <CardFooter className="grid grid-cols-3 gap-2 p-4 pt-0">
+                  <CardFooter className="grid grid-cols-4 gap-1.5 p-4 pt-0">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full text-[11px] px-2 gap-1"
+                      className="w-full text-[10px] px-1 gap-1"
                       asChild
                     >
                       <Link href={`/showcase?propertyId=${prop.id}`}>
-                        <Film className="h-3.5 w-3.5 text-primary shrink-0" />
-                        <span className="truncate">Media Tour</span>
+                        <Film className="h-3 w-3 text-primary shrink-0" />
+                        <span className="truncate">Media</span>
                       </Link>
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full text-[11px] px-2 gap-1 text-primary hover:text-primary"
+                      className="w-full text-[10px] px-1 gap-1 text-primary hover:text-primary"
                       onClick={() => {
                         setSelectedSocialProperty(prop);
                         setIsSocialModalOpen(true);
                       }}
                     >
-                      <Share2 className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">Social Card</span>
+                      <Share2 className="h-3 w-3 shrink-0" />
+                      <span className="truncate">Social</span>
                     </Button>
-                    <Button size="sm" className="w-full text-[11px] px-2 gap-1" asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-[10px] px-1 gap-1"
+                      onClick={() => handleOpenEdit(prop)}
+                    >
+                      <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      <span className="truncate">Edit</span>
+                    </Button>
+                    <Button size="sm" className="w-full text-[10px] px-1 gap-1" asChild>
                       <Link href={`/quotations?propertyId=${prop.id}`}>
-                        <Calculator className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">Compute</span>
+                        <Calculator className="h-3 w-3 shrink-0" />
+                        <span className="truncate">Quote</span>
                       </Link>
                     </Button>
                   </CardFooter>
@@ -1519,6 +1563,18 @@ export default function PropertiesPage() {
           setIsSocialModalOpen(false);
           setSelectedSocialProperty(null);
         }}
+      />
+
+      {/* Edit Property Listing Modal */}
+      <EditPropertyModal
+        property={editingProperty}
+        isOpen={isEditOpen}
+        onClose={() => {
+          setIsEditOpen(false);
+          setEditingProperty(null);
+        }}
+        onSave={handleSaveEdit}
+        onDelete={handleDeleteProperty}
       />
     </div>
   );

@@ -813,7 +813,9 @@ interface CrmState {
   bulkAddLeads: (inputs: CreateLeadInput[]) => Lead[];
   addProperty: (input: CreatePropertyInput) => Property;
   bulkAddProperties: (inputs: CreatePropertyInput[]) => Property[];
+  updateProperty: (propertyId: string, input: Partial<CreatePropertyInput>) => Property | null;
   updatePropertyStatus: (propertyId: string, status: Property["status"]) => void;
+  deleteProperty: (propertyId: string) => void;
   addLeadNote: (leadId: string, noteText: string) => void;
   sendMessage: (
     leadId: string,
@@ -886,6 +888,23 @@ function saveLocalCustomProperty(property: Property, agentUid?: string | null) {
     localStorage.setItem(key, JSON.stringify(updated));
   } catch (e) {
     console.warn("localStorage property save failed:", e);
+  }
+}
+
+function deleteLocalCustomProperty(propertyId: string, agentUid?: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    const key = `propflow_properties_${agentUid || "default"}`;
+    const existing = getLocalCustomProperties(agentUid);
+    const updated = existing.filter((p) => p.id !== propertyId);
+    localStorage.setItem(key, JSON.stringify(updated));
+    if (agentUid && agentUid !== "default") {
+      const defaultExisting = getLocalCustomProperties("default");
+      const defaultUpdated = defaultExisting.filter((p) => p.id !== propertyId);
+      localStorage.setItem("propflow_properties_default", JSON.stringify(defaultUpdated));
+    }
+  } catch (e) {
+    console.warn("localStorage property delete failed:", e);
   }
 }
 
@@ -1102,6 +1121,43 @@ export const useCrmStore = create<CrmState>((set, get) => ({
     return createdList;
   },
 
+  updateProperty: (propertyId, input) => {
+    const activeUid = get().activeAgentUid;
+    let updatedProperty: Property | null = null;
+
+    set((state) => {
+      const target = state.properties.find((p) => p.id === propertyId);
+      if (!target) return state;
+
+      updatedProperty = {
+        ...target,
+        ...input,
+      };
+
+      return {
+        properties: state.properties.map((p) =>
+          p.id === propertyId ? updatedProperty! : p
+        ),
+      };
+    });
+
+    if (updatedProperty) {
+      const prop = updatedProperty as Property;
+      const targetUid =
+        activeUid ||
+        (prop.listedByAgentId && prop.listedByAgentId !== "agent-direct-listing"
+          ? prop.listedByAgentId
+          : null);
+      saveLocalCustomProperty(prop, targetUid);
+      saveLocalCustomProperty(prop, "default");
+      if (targetUid) {
+        void persistAgentDocument(targetUid, "properties", prop);
+      }
+    }
+
+    return updatedProperty;
+  },
+
   updatePropertyStatus: (propertyId, status) => {
     set((state) => ({
       properties: state.properties.map((p) =>
@@ -1110,7 +1166,36 @@ export const useCrmStore = create<CrmState>((set, get) => ({
     }));
     const updatedProp = get().properties.find((p) => p.id === propertyId);
     if (updatedProp) {
-      void persistAgentDocument(get().activeAgentUid, "properties", updatedProp);
+      const activeUid = get().activeAgentUid;
+      const targetUid =
+        activeUid ||
+        (updatedProp.listedByAgentId && updatedProp.listedByAgentId !== "agent-direct-listing"
+          ? updatedProp.listedByAgentId
+          : null);
+      saveLocalCustomProperty(updatedProp, targetUid);
+      saveLocalCustomProperty(updatedProp, "default");
+      if (targetUid) {
+        void persistAgentDocument(targetUid, "properties", updatedProp);
+      }
+    }
+  },
+
+  deleteProperty: (propertyId) => {
+    const activeUid = get().activeAgentUid;
+    const target = get().properties.find((p) => p.id === propertyId);
+
+    set((state) => ({
+      properties: state.properties.filter((p) => p.id !== propertyId),
+    }));
+
+    if (target) {
+      const targetUid =
+        activeUid ||
+        (target.listedByAgentId && target.listedByAgentId !== "agent-direct-listing"
+          ? target.listedByAgentId
+          : null);
+      deleteLocalCustomProperty(propertyId, targetUid);
+      deleteLocalCustomProperty(propertyId, "default");
     }
   },
 
