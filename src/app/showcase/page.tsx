@@ -9,27 +9,45 @@ import {
   BedDouble,
   Building2,
   Calculator,
+  Calendar,
   CalendarCheck,
   Car,
+  Check,
   CheckCircle2,
   ChevronRight,
   Compass,
+  Copy,
   Film,
+  Globe2,
   Home,
   Image as ImageIcon,
   MapPin,
   Maximize2,
   PlayCircle,
   Ruler,
+  Search,
   Share2,
   Sparkles,
   Utensils,
+  X,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { Property } from "@/lib/schemas";
 import { useCrmStore } from "@/lib/store/crm-store";
-import { formatCompactCurrency, formatCurrency } from "@/lib/utils";
+import {
+  convertFromPhp,
+  CURRENCY_CONFIGS,
+  formatCompactCurrency,
+  formatCurrency,
+  type SupportedCurrency,
+} from "@/lib/utils";
+import {
+  getSafePropertyImageUrl,
+  handleImageFallbackError,
+} from "@/lib/property-images";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { SocialShareCardModal } from "@/components/marketing/social-share-card-modal";
 import {
   Card,
@@ -49,9 +67,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-
-const DEFAULT_FALLBACK_IMAGE =
-  "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80";
 
 interface RoomHotspot {
   id: string;
@@ -227,7 +242,14 @@ function ShowcaseStorefrontContent() {
   const searchParams = useSearchParams();
   const initialPropertyId = searchParams.get("propertyId");
   const { properties } = useCrmStore();
+
   const [categoryFilter, setCategoryFilter] = React.useState<string>("ALL");
+  const [turnoverFilter, setTurnoverFilter] = React.useState<string>("ALL");
+  const [searchQuery, setSearchQuery] = React.useState<string>("");
+  const [sortOption, setSortOption] = React.useState<string>("FEATURED");
+  const [selectedCurrency, setSelectedCurrency] = React.useState<SupportedCurrency>("PHP");
+  const [hasCopiedShowcaseLink, setHasCopiedShowcaseLink] = React.useState(false);
+
   const [selectedProperty, setSelectedProperty] =
     React.useState<Property | null>(null);
   const [selectedSocialProperty, setSelectedSocialProperty] =
@@ -259,9 +281,43 @@ function ShowcaseStorefrontContent() {
   }, [initialPropertyId, properties]);
 
   const filteredProperties = React.useMemo(() => {
-    if (categoryFilter === "ALL") return properties;
-    return properties.filter((p) => p.propertyType === categoryFilter);
-  }, [properties, categoryFilter]);
+    return properties
+      .filter((p) => {
+        // Category filter
+        if (categoryFilter !== "ALL" && p.propertyType !== categoryFilter) {
+          return false;
+        }
+
+        // Turnover status filter
+        const turnover = (p.turnoverDate || "").toLowerCase();
+        if (turnoverFilter === "RFO") {
+          const isRfo = turnover.includes("rfo") || turnover.includes("ready");
+          if (!isRfo) return false;
+        } else if (turnoverFilter === "PRE_SELLING") {
+          const isPreSelling = turnover.includes("pre-selling") || turnover.includes("202");
+          if (!isPreSelling) return false;
+        }
+
+        // Search query
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          const match =
+            p.projectName.toLowerCase().includes(q) ||
+            p.developerName.toLowerCase().includes(q) ||
+            p.unitCode.toLowerCase().includes(q) ||
+            p.locationCity.toLowerCase().includes(q) ||
+            p.address.toLowerCase().includes(q);
+          if (!match) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortOption === "PRICE_ASC") return a.listPrice - b.listPrice;
+        if (sortOption === "PRICE_DESC") return b.listPrice - a.listPrice;
+        if (sortOption === "AREA_DESC") return b.floorAreaSqm - a.floorAreaSqm;
+        return 0; // Default order
+      });
+  }, [properties, categoryFilter, turnoverFilter, searchQuery, sortOption]);
 
   const handleOpenTourModal = (prop: Property) => {
     setSelectedProperty(prop);
@@ -270,205 +326,378 @@ function ShowcaseStorefrontContent() {
     setSelectedHotspotId("living");
   };
 
+  const handleCopyShowcaseLink = () => {
+    const url = typeof window !== "undefined"
+      ? `${window.location.origin}/showcase`
+      : "https://propflow.ph/showcase";
+    navigator.clipboard.writeText(url);
+    setHasCopiedShowcaseLink(true);
+    toast.success("Showcase link copied! Ready to share with prospective buyers via WhatsApp or Messenger.");
+    setTimeout(() => setHasCopiedShowcaseLink(false), 2500);
+  };
+
   return (
     <div className="container space-y-6 py-6">
       {/* Hero Banner */}
       <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/15 via-background to-secondary/40 p-6 sm:p-8">
-        <div className="max-w-2xl space-y-3">
-          <Badge variant="new" className="gap-1.5 text-xs">
-            <Sparkles className="h-3.5 w-3.5" /> Interactive Property Showcase &amp; Virtual Tours
-          </Badge>
-          <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
-            Explore Model Units, Architectural Photos &amp; Video Walkthroughs
-          </h1>
-          <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
-            Tour our accredited Condominiums, Executive Villages, and Townhomes in high-definition. Watch virtual model unit walkthroughs and unlock instant monthly equity computations.
-          </p>
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+          <div className="max-w-2xl space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="new" className="gap-1.5 text-xs">
+                <Sparkles className="h-3.5 w-3.5" /> Interactive Property Showcase &amp; Virtual Tours
+              </Badge>
+              <Badge variant="outline" className="text-xs bg-background/80 font-mono">
+                {filteredProperties.length} Units Available
+              </Badge>
+            </div>
+            <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
+              Explore Model Units, Architectural Photos &amp; Video Walkthroughs
+            </h1>
+            <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+              Tour our accredited Condominiums, Executive Villages, and Townhomes in high-definition. Inspect interactive room hotspots, watch walkthrough videos, and simulate instant monthly equity computations.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 self-start">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 bg-background shadow-sm hover:border-primary"
+              onClick={handleCopyShowcaseLink}
+            >
+              {hasCopiedShowcaseLink ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Link Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3.5 w-3.5 text-primary" />
+                  <span>Share Showcase to Client</span>
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
-        {/* Category Filter Pills */}
-        <div className="mt-5 flex flex-wrap gap-2">
-          {[
-            { code: "ALL", label: "All Developments" },
-            { code: "CONDOMINIUM", label: "Condominiums" },
-            { code: "HOUSE_AND_LOT", label: "House & Lot" },
-            { code: "TOWNHOUSE", label: "Townhomes" },
-          ].map((cat) => (
-            <Button
-              key={cat.code}
-              size="sm"
-              variant={categoryFilter === cat.code ? "default" : "outline"}
-              className="h-8 text-xs"
-              onClick={() => setCategoryFilter(cat.code)}
+        {/* Currency Switcher for Overseas & OFW Buyers */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+          <div className="flex items-center gap-2">
+            <Globe2 className="h-4 w-4 text-primary" />
+            <span className="text-xs font-semibold">Display Currency:</span>
+            <span className="text-[11px] text-muted-foreground hidden sm:inline">
+              Indicative conversion for OFWs and international investors
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1">
+            {(Object.keys(CURRENCY_CONFIGS) as SupportedCurrency[]).map((curr) => {
+              const conf = CURRENCY_CONFIGS[curr];
+              const isSelected = selectedCurrency === curr;
+              return (
+                <Button
+                  key={curr}
+                  type="button"
+                  size="sm"
+                  variant={isSelected ? "default" : "outline"}
+                  className="h-7 px-2 text-xs gap-1"
+                  onClick={() => setSelectedCurrency(curr)}
+                >
+                  <span>{conf.flag}</span>
+                  <span className="font-semibold">{conf.code}</span>
+                  {curr !== "PHP" && (
+                    <span className="text-[10px] opacity-75 hidden md:inline">
+                      (≈ ₱{conf.phpRate})
+                    </span>
+                  )}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Search & Filter Bar */}
+        <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-12">
+          {/* Keyword Search */}
+          <div className="relative sm:col-span-5">
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by estate, developer, city, or unit..."
+              className="h-8 pl-8 pr-8 text-xs bg-background shadow-sm"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Category Filter */}
+          <div className="sm:col-span-3">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none"
             >
-              {cat.label}
-            </Button>
-          ))}
+              <option value="ALL">All Property Categories</option>
+              <option value="CONDOMINIUM">Condominiums</option>
+              <option value="HOUSE_AND_LOT">House &amp; Lot</option>
+              <option value="TOWNHOUSE">Townhomes</option>
+              <option value="RESIDENTIAL_LOT">Residential Lots</option>
+              <option value="COMMERCIAL_UNIT">Commercial Units</option>
+            </select>
+          </div>
+
+          {/* Turnover Status */}
+          <div className="sm:col-span-2">
+            <select
+              value={turnoverFilter}
+              onChange={(e) => setTurnoverFilter(e.target.value)}
+              className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none"
+            >
+              <option value="ALL">All Turnover Dates</option>
+              <option value="RFO">Ready for Occupancy (RFO)</option>
+              <option value="PRE_SELLING">Pre-selling</option>
+            </select>
+          </div>
+
+          {/* Sorting */}
+          <div className="sm:col-span-2">
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none"
+            >
+              <option value="FEATURED">Featured Developments</option>
+              <option value="PRICE_ASC">Price: Low to High</option>
+              <option value="PRICE_DESC">Price: High to Low</option>
+              <option value="AREA_DESC">Floor Area: Largest</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Storefront Media Cards Grid */}
       <div className="grid gap-6 md:grid-cols-2">
-        {filteredProperties.map((prop) => {
-          const heroImage =
-            prop.thumbnailUrl ||
-            prop.galleryImages?.[0] ||
-            DEFAULT_FALLBACK_IMAGE;
-          const photoCount = prop.galleryImages?.length || 1;
-          const hasVideo = Boolean(prop.videoWalkthroughUrl);
-          const estMonthlyDp24 =
-            (prop.listPrice * 0.2 - prop.reservationFee) / 24;
-
-          return (
-            <Card
-              key={prop.id}
-              className="group overflow-hidden flex flex-col justify-between border shadow-sm transition-all hover:shadow-md"
+        {filteredProperties.length === 0 ? (
+          <div className="col-span-1 md:col-span-2 rounded-2xl border border-dashed p-12 text-center bg-muted/10">
+            <Building2 className="mx-auto h-10 w-10 text-muted-foreground/60" />
+            <h3 className="mt-3 text-base font-bold">No property developments found</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Try adjusting your search keywords, turnover status, or category filter.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 text-xs"
+              onClick={() => {
+                setSearchQuery("");
+                setCategoryFilter("ALL");
+                setTurnoverFilter("ALL");
+                setSortOption("FEATURED");
+              }}
             >
-              <div>
-                {/* Hero Cover Image with Media Badges */}
-                <div
-                  className="relative h-56 w-full overflow-hidden bg-muted cursor-pointer"
-                  onClick={() => handleOpenTourModal(prop)}
-                >
-                  <img
-                    src={heroImage}
-                    alt={prop.projectName}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+              Reset All Filters
+            </Button>
+          </div>
+        ) : (
+          filteredProperties.map((prop) => {
+            const heroImage = getSafePropertyImageUrl(
+              prop.thumbnailUrl || prop.galleryImages?.[0],
+              prop.propertyType
+            );
+            const photoCount = prop.galleryImages?.length || 1;
+            const hasVideo = Boolean(prop.videoWalkthroughUrl);
+            const estMonthlyDp24 =
+              (prop.listPrice * 0.2 - prop.reservationFee) / 24;
 
-                  {/* Top Badges */}
-                  <div className="absolute left-3 right-3 top-3 flex items-center justify-between">
-                    <Badge
-                      variant={
-                        prop.status === "AVAILABLE" ? "won" : "reservation"
-                      }
-                      className="text-[10px] shadow"
-                    >
-                      {prop.status} • {prop.turnoverDate}
-                    </Badge>
+            const displayPrice =
+              selectedCurrency === "PHP"
+                ? formatCompactCurrency(prop.listPrice)
+                : formatCurrency(
+                    convertFromPhp(prop.listPrice, selectedCurrency),
+                    selectedCurrency,
+                    0
+                  );
 
-                    <div className="flex items-center gap-1.5">
-                      <span className="inline-flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
-                        <ImageIcon className="h-3 w-3" /> {photoCount} Photos
-                      </span>
-                      {hasVideo && (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-primary/90 px-2 py-1 text-[10px] font-semibold text-primary-foreground shadow">
-                          <Film className="h-3 w-3" /> Video Tour
+            const displayEquity =
+              selectedCurrency === "PHP"
+                ? `${formatCurrency(estMonthlyDp24, "PHP", 0)}/mo`
+                : `${formatCurrency(
+                    convertFromPhp(estMonthlyDp24, selectedCurrency),
+                    selectedCurrency,
+                    0
+                  )}/mo`;
+
+            return (
+              <Card
+                key={prop.id}
+                className="group overflow-hidden flex flex-col justify-between border shadow-sm transition-all hover:shadow-md"
+              >
+                <div>
+                  {/* Hero Cover Image with Media Badges */}
+                  <div
+                    className="relative h-56 w-full overflow-hidden bg-muted cursor-pointer"
+                    onClick={() => handleOpenTourModal(prop)}
+                  >
+                    <img
+                      src={heroImage}
+                      alt={prop.projectName}
+                      onError={(e) => handleImageFallbackError(e, prop.propertyType)}
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+
+                    {/* Top Badges */}
+                    <div className="absolute left-3 right-3 top-3 flex items-center justify-between">
+                      <Badge
+                        variant={
+                          prop.status === "AVAILABLE" ? "won" : "reservation"
+                        }
+                        className="text-[10px] shadow"
+                      >
+                        {prop.status} • {prop.turnoverDate}
+                      </Badge>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+                          <ImageIcon className="h-3 w-3" /> {photoCount} Photos
                         </span>
-                      )}
+                        {hasVideo && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-primary/90 px-2 py-1 text-[10px] font-semibold text-primary-foreground shadow">
+                            <Film className="h-3 w-3" /> Video Tour
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Bottom Overlay Title & Price */}
+                    <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between text-white">
+                      <div className="min-w-0 pr-2">
+                        <p className="text-[11px] font-medium text-white/80">
+                          {prop.developerName}
+                        </p>
+                        <h2 className="text-base font-bold leading-tight truncate sm:text-lg">
+                          {prop.projectName}
+                        </h2>
+                        <p className="text-xs text-white/90 flex items-center gap-1 truncate">
+                          <MapPin className="h-3 w-3 shrink-0 text-primary-foreground" />
+                          {prop.unitCode} • {prop.locationCity}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-white/75 block">
+                          List Price
+                        </span>
+                        <span className="text-base font-bold tabular-nums">
+                          {displayPrice}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Bottom Overlay Title & Price */}
-                  <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between text-white">
-                    <div className="min-w-0 pr-2">
-                      <p className="text-[11px] font-medium text-white/80">
-                        {prop.developerName}
-                      </p>
-                      <h2 className="text-base font-bold leading-tight truncate sm:text-lg">
-                        {prop.projectName}
-                      </h2>
-                      <p className="text-xs text-white/90 flex items-center gap-1 truncate">
-                        <MapPin className="h-3 w-3 shrink-0 text-primary-foreground" />
-                        {prop.unitCode} • {prop.locationCity}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-[10px] text-white/75 block">
-                        List Price
+                  <CardContent className="p-4 space-y-3">
+                    {/* Specs Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-3">
+                        <span className="flex items-center gap-1 font-medium text-foreground">
+                          <Maximize2 className="h-3.5 w-3.5 text-primary" />
+                          {prop.floorAreaSqm} sqm
+                        </span>
+                        {prop.lotAreaSqm > 0 && (
+                          <span>• {prop.lotAreaSqm} sqm Lot</span>
+                        )}
+                        <span className="flex items-center gap-1">
+                          <BedDouble className="h-3.5 w-3.5 text-foreground" />
+                          {prop.bedrooms} BR
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Bath className="h-3.5 w-3.5 text-foreground" />
+                          {prop.bathrooms} T&amp;B
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Car className="h-3.5 w-3.5 text-foreground" />
+                          {prop.parkingSlots} Park
+                        </span>
+                      </div>
+                      <span className="text-xs font-semibold text-primary tabular-nums">
+                        Est. Equity: {displayEquity}
                       </span>
-                      <span className="text-base font-bold tabular-nums">
-                        {formatCompactCurrency(prop.listPrice)}
-                      </span>
                     </div>
-                  </div>
+
+                    {/* Description */}
+                    <p className="text-xs leading-relaxed text-muted-foreground line-clamp-2">
+                      {prop.description ||
+                        `Prime ${prop.propertyType.toLowerCase()} residence located at ${prop.address}. Available for flexible Bank, Pag-IBIG, or In-House financing.`}
+                    </p>
+
+                    {/* Amenity Chips */}
+                    {prop.amenities && prop.amenities.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {prop.amenities.slice(0, 4).map((amenity) => (
+                          <Badge
+                            key={amenity}
+                            variant="secondary"
+                            className="text-[10px] font-normal"
+                          >
+                            {amenity}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
                 </div>
 
-                <CardContent className="p-4 space-y-3">
-                  {/* Specs Bar */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-3">
-                      <span className="flex items-center gap-1 font-medium text-foreground">
-                        <Maximize2 className="h-3.5 w-3.5 text-primary" />
-                        {prop.floorAreaSqm} sqm
-                      </span>
-                      {prop.lotAreaSqm > 0 && (
-                        <span>• {prop.lotAreaSqm} sqm Lot</span>
-                      )}
-                      <span className="flex items-center gap-1">
-                        <BedDouble className="h-3.5 w-3.5 text-foreground" />
-                        {prop.bedrooms} BR
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Bath className="h-3.5 w-3.5 text-foreground" />
-                        {prop.bathrooms} T&B
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Car className="h-3.5 w-3.5 text-foreground" />
-                        {prop.parkingSlots} Park
-                      </span>
-                    </div>
-                    <span className="text-xs font-semibold text-primary tabular-nums">
-                      Est. Equity: {formatCurrency(estMonthlyDp24, "PHP", 0)}/mo
-                    </span>
-                  </div>
-
-                  {/* Description */}
-                  <p className="text-xs leading-relaxed text-muted-foreground line-clamp-2">
-                    {prop.description ||
-                      `Prime ${prop.propertyType.toLowerCase()} residence located at ${prop.address}. Available for flexible Bank, Pag-IBIG, or In-House financing.`}
-                  </p>
-
-                  {/* Amenity Chips */}
-                  {prop.amenities && prop.amenities.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {prop.amenities.slice(0, 4).map((amenity) => (
-                        <Badge
-                          key={amenity}
-                          variant="secondary"
-                          className="text-[10px] font-normal"
-                        >
-                          {amenity}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </div>
-
-              <CardFooter className="grid grid-cols-3 gap-2 border-t bg-muted/20 p-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-[11px] px-1.5 gap-1"
-                  onClick={() => handleOpenTourModal(prop)}
-                >
-                  <PlayCircle className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span className="truncate">Media Tour</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-[11px] px-1.5 gap-1 text-primary hover:text-primary"
-                  onClick={() => {
-                    setSelectedSocialProperty(prop);
-                    setIsSocialModalOpen(true);
-                  }}
-                >
-                  <Share2 className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">Social Card</span>
-                </Button>
-                <Button size="sm" className="w-full text-[11px] px-1.5 gap-1" asChild>
-                  <Link href={`/quotations?propertyId=${prop.id}`}>
-                    <Calculator className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">Compute</span>
-                  </Link>
-                </Button>
-              </CardFooter>
-            </Card>
-          );
-        })}
+                <CardFooter className="grid grid-cols-4 gap-1.5 border-t bg-muted/20 p-2.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-[10px] px-1 gap-1"
+                    onClick={() => handleOpenTourModal(prop)}
+                  >
+                    <PlayCircle className="h-3 w-3 text-primary shrink-0" />
+                    <span className="truncate">Media Tour</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-[10px] px-1 gap-1 text-primary hover:text-primary"
+                    onClick={() => {
+                      setSelectedSocialProperty(prop);
+                      setIsSocialModalOpen(true);
+                    }}
+                  >
+                    <Share2 className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Social Card</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-[10px] px-1 gap-1"
+                    asChild
+                  >
+                    <Link href={`/trippings?propertyId=${prop.id}`}>
+                      <Calendar className="h-3 w-3 text-primary shrink-0" />
+                      <span className="truncate">Viewing</span>
+                    </Link>
+                  </Button>
+                  <Button size="sm" className="w-full text-[10px] px-1 gap-1" asChild>
+                    <Link href={`/quotations?propertyId=${prop.id}`}>
+                      <Calculator className="h-3 w-3 shrink-0" />
+                      <span className="truncate">Compute</span>
+                    </Link>
+                  </Button>
+                </CardFooter>
+              </Card>
+            );
+          })
+        )}
       </div>
 
       {/* Interactive Lightbox Modal: Photos Gallery + Floor Plan Hotspots + Video Walkthrough */}
@@ -519,14 +748,17 @@ function ShowcaseStorefrontContent() {
                 <TabsContent value="photos" className="mt-3 space-y-3">
                   <div className="relative h-72 sm:h-96 w-full overflow-hidden rounded-xl border bg-black">
                     <img
-                      src={
+                      src={getSafePropertyImageUrl(
                         selectedProperty.galleryImages?.[activePhotoIndex] ||
-                        selectedProperty.thumbnailUrl ||
-                        DEFAULT_FALLBACK_IMAGE
-                      }
+                          selectedProperty.thumbnailUrl,
+                        selectedProperty.propertyType
+                      )}
                       alt={`${selectedProperty.projectName} view ${
                         activePhotoIndex + 1
                       }`}
+                      onError={(e) =>
+                        handleImageFallbackError(e, selectedProperty.propertyType)
+                      }
                       className="h-full w-full object-cover"
                     />
                   </div>
@@ -547,8 +779,17 @@ function ShowcaseStorefrontContent() {
                             }`}
                           >
                             <img
-                              src={imgUrl}
+                              src={getSafePropertyImageUrl(
+                                imgUrl,
+                                selectedProperty.propertyType
+                              )}
                               alt="Thumbnail"
+                              onError={(e) =>
+                                handleImageFallbackError(
+                                  e,
+                                  selectedProperty.propertyType
+                                )
+                              }
                               className="h-full w-full object-cover"
                             />
                           </button>
@@ -959,14 +1200,19 @@ function ShowcaseStorefrontContent() {
                           <div className="space-y-2 pt-2 border-t">
                             <div className="relative h-28 w-full overflow-hidden rounded-lg border bg-black">
                               <img
-                                src={
+                                src={getSafePropertyImageUrl(
                                   selectedProperty.galleryImages?.[
                                     activeHotspot.photoIndex
-                                  ] ||
-                                  selectedProperty.thumbnailUrl ||
-                                  DEFAULT_FALLBACK_IMAGE
-                                }
+                                  ] || selectedProperty.thumbnailUrl,
+                                  selectedProperty.propertyType
+                                )}
                                 alt={activeHotspot.name}
+                                onError={(e) =>
+                                  handleImageFallbackError(
+                                    e,
+                                    selectedProperty.propertyType
+                                  )
+                                }
                                 className="h-full w-full object-cover"
                               />
                               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />

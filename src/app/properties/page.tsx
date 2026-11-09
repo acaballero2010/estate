@@ -45,6 +45,7 @@ import { uploadMediaFile } from "@/lib/firebase/storage-upload";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { SocialShareCardModal } from "@/components/marketing/social-share-card-modal";
 import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
+import { getSafePropertyImageUrl } from "@/lib/property-images";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -232,16 +233,23 @@ export default function PropertiesPage() {
   };
 
   const onSubmitNewProperty = (values: CreatePropertyInput) => {
+    const safeThumbnail = getSafePropertyImageUrl(
+      values.thumbnailUrl,
+      values.propertyType
+    );
+    const safeGallery =
+      values.galleryImages && values.galleryImages.length > 0
+        ? values.galleryImages.map((img) =>
+            getSafePropertyImageUrl(img, values.propertyType)
+          )
+        : [safeThumbnail];
+
     const created = addProperty({
       ...values,
+      thumbnailUrl: safeThumbnail,
       listedByAgentId: user?.uid || "agent-direct-listing",
       listedByAgentName: agentProfile?.fullName || user?.displayName || "Agent",
-      galleryImages:
-        values.galleryImages && values.galleryImages.length > 0
-          ? values.galleryImages
-          : values.thumbnailUrl
-          ? [values.thumbnailUrl]
-          : [],
+      galleryImages: safeGallery,
     });
     setPortfolioView("MY_LISTINGS");
     toast.success(

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { type Property } from "@/lib/schemas";
 import { formatCurrency } from "@/lib/utils";
+import { getSafePropertyImageUrl } from "@/lib/property-images";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -140,16 +141,20 @@ export function SocialShareCardModal({
           console.warn("QR code generation fallback:", e);
         }
 
-        // 2. Load images in parallel (with safe CORS)
-        const imgSrc =
-          currentProp.thumbnailUrl ||
-          currentProp.galleryImages?.[0] ||
-          "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80";
+        // 2. Load images in parallel (with safe CORS and fallback)
+        const imgSrc = getSafePropertyImageUrl(
+          currentProp.thumbnailUrl || currentProp.galleryImages?.[0],
+          currentProp.propertyType
+        );
 
-        const [propImg, qrImg] = await Promise.all([
-          loadSafeCorsImage(imgSrc),
-          qrDataUrl ? loadBase64Image(qrDataUrl) : Promise.resolve(null),
-        ]);
+        let propImg = await loadSafeCorsImage(imgSrc);
+        if (!propImg) {
+          // If custom URL failed (e.g. CORS or 404), fall back to guaranteed category stock
+          const fallbackSrc = getSafePropertyImageUrl(null, currentProp.propertyType);
+          propImg = await loadSafeCorsImage(fallbackSrc);
+        }
+
+        const qrImg = qrDataUrl ? await loadBase64Image(qrDataUrl) : null;
 
         if (isCancelled) return;
 
