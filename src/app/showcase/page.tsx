@@ -9,7 +9,6 @@ import {
   BedDouble,
   Building2,
   Calculator,
-  Calendar,
   CalendarCheck,
   Car,
   Check,
@@ -17,17 +16,27 @@ import {
   ChevronRight,
   Compass,
   Copy,
+  ExternalLink,
   Film,
   Globe2,
+  GraduationCap,
+  HeartPulse,
   Home,
   Image as ImageIcon,
+  Loader2,
   MapPin,
   Maximize2,
+  Navigation,
   PlayCircle,
+  RotateCcw,
   Ruler,
   Search,
   Share2,
+  ShoppingBag,
   Sparkles,
+  Ticket,
+  Train,
+  TrendingUp,
   Utensils,
   X,
 } from "lucide-react";
@@ -45,9 +54,15 @@ import {
   getSafePropertyImageUrl,
   handleImageFallbackError,
 } from "@/lib/property-images";
+import { PanoramaViewer } from "@/components/showcase/panorama-viewer";
+import {
+  calculatePropertyInvestmentYield,
+  getPropertyVicinityLandmarks,
+} from "@/lib/showcase-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SocialShareCardModal } from "@/components/marketing/social-share-card-modal";
 import {
   Card,
@@ -94,6 +109,21 @@ function getRoomIcon(category: RoomHotspot["category"]) {
     case "LIVING":
     default:
       return <Home className="h-3.5 w-3.5" />;
+  }
+}
+
+function getLandmarkCategoryIcon(category: string) {
+  switch (category) {
+    case "RETAIL":
+      return <ShoppingBag className="h-4 w-4 text-amber-500 shrink-0" />;
+    case "HEALTHCARE":
+      return <HeartPulse className="h-4 w-4 text-rose-500 shrink-0" />;
+    case "EDUCATION":
+      return <GraduationCap className="h-4 w-4 text-blue-500 shrink-0" />;
+    case "TRANSIT":
+      return <Train className="h-4 w-4 text-emerald-500 shrink-0" />;
+    default:
+      return <MapPin className="h-4 w-4 text-primary shrink-0" />;
   }
 }
 
@@ -241,7 +271,7 @@ function getPropertyHotspots(property: Property): RoomHotspot[] {
 function ShowcaseStorefrontContent() {
   const searchParams = useSearchParams();
   const initialPropertyId = searchParams.get("propertyId");
-  const { properties } = useCrmStore();
+  const { properties, addLead } = useCrmStore();
 
   const [categoryFilter, setCategoryFilter] = React.useState<string>("ALL");
   const [turnoverFilter, setTurnoverFilter] = React.useState<string>("ALL");
@@ -249,6 +279,20 @@ function ShowcaseStorefrontContent() {
   const [sortOption, setSortOption] = React.useState<string>("FEATURED");
   const [selectedCurrency, setSelectedCurrency] = React.useState<SupportedCurrency>("PHP");
   const [hasCopiedShowcaseLink, setHasCopiedShowcaseLink] = React.useState(false);
+
+  // VIP Brochure & Showroom Pass Inquiry Modal State
+  const [inquiryProperty, setInquiryProperty] = React.useState<Property | null>(null);
+  const [isInquiryModalOpen, setIsInquiryModalOpen] = React.useState(false);
+  const [inquiryFirstName, setInquiryFirstName] = React.useState("");
+  const [inquiryLastName, setInquiryLastName] = React.useState("");
+  const [inquiryEmail, setInquiryEmail] = React.useState("");
+  const [inquiryPhone, setInquiryPhone] = React.useState("");
+  const [inquiryIntent, setInquiryIntent] = React.useState("INVESTMENT_3_6M");
+  const [inquiryFinancing, setInquiryFinancing] = React.useState<
+    "BANK" | "SPOT_CASH" | "PAG_IBIG" | "IN_HOUSE"
+  >("BANK");
+  const [isSubmittingInquiry, setIsSubmittingInquiry] = React.useState(false);
+  const [registeredLeadId, setRegisteredLeadId] = React.useState<string | null>(null);
 
   const [selectedProperty, setSelectedProperty] =
     React.useState<Property | null>(null);
@@ -326,6 +370,13 @@ function ShowcaseStorefrontContent() {
     setSelectedHotspotId("living");
   };
 
+  const handleOpenPanoramaModal = (prop: Property) => {
+    setSelectedProperty(prop);
+    setActivePhotoIndex(0);
+    setActiveTab("panorama");
+    setSelectedHotspotId("living");
+  };
+
   const handleCopyShowcaseLink = () => {
     const url = typeof window !== "undefined"
       ? `${window.location.origin}/showcase`
@@ -334,6 +385,58 @@ function ShowcaseStorefrontContent() {
     setHasCopiedShowcaseLink(true);
     toast.success("Showcase link copied! Ready to share with prospective buyers via WhatsApp or Messenger.");
     setTimeout(() => setHasCopiedShowcaseLink(false), 2500);
+  };
+
+  const handleOpenInquiryModal = (prop: Property) => {
+    setInquiryProperty(prop);
+    setRegisteredLeadId(null);
+    setIsInquiryModalOpen(true);
+  };
+
+  const handleSubmitInquiry = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inquiryProperty) return;
+
+    if (!inquiryFirstName.trim() || !inquiryLastName.trim() || !inquiryPhone.trim()) {
+      toast.error("Please fill in your name and contact number.");
+      return;
+    }
+
+    setIsSubmittingInquiry(true);
+    try {
+      const intentLabelMap: Record<string, string> = {
+        INVESTMENT_3_6M: "Investment within 3-6 months",
+        IMMEDIATE_RFO: "Immediate Move-in (RFO)",
+        RETIREMENT_FAMILY: "Primary residence / Family",
+        OFW_OVERSEAS: "Overseas / OFW Portfolio",
+      };
+
+      const newLead = addLead({
+        firstName: inquiryFirstName.trim(),
+        lastName: inquiryLastName.trim(),
+        email: inquiryEmail.trim() || undefined,
+        phone: inquiryPhone.trim(),
+        source: "PORTAL_INQUIRY",
+        priority: "HOT",
+        stage: "NEW_LEAD",
+        budgetMin: inquiryProperty.listPrice * 0.85,
+        budgetMax: inquiryProperty.listPrice * 1.15,
+        preferredLocations: [inquiryProperty.locationCity],
+        preferredPropertyTypes: [inquiryProperty.propertyType],
+        financingPreference: inquiryFinancing,
+        notes: `Inquired via Showcase Storefront for ${inquiryProperty.projectName} (${inquiryProperty.unitCode}) - ${inquiryProperty.developerName}. Requested VIP Pass & E-Brochure. Buying Intent: ${intentLabelMap[inquiryIntent] || inquiryIntent}.`,
+      });
+
+      setRegisteredLeadId(newLead.id);
+      toast.success(
+        `VIP Pass confirmed for ${inquiryProperty.projectName}! Your consultant will contact you via WhatsApp.`
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not register inquiry. Please try again.");
+    } finally {
+      setIsSubmittingInquiry(false);
+    }
   };
 
   return (
@@ -516,6 +619,7 @@ function ShowcaseStorefrontContent() {
             const hasVideo = Boolean(prop.videoWalkthroughUrl);
             const estMonthlyDp24 =
               (prop.listPrice * 0.2 - prop.reservationFee) / 24;
+            const yieldInfo = calculatePropertyInvestmentYield(prop);
 
             const displayPrice =
               selectedCurrency === "PHP"
@@ -631,6 +735,19 @@ function ShowcaseStorefrontContent() {
                       </span>
                     </div>
 
+                    {/* Rental Yield & Investment ROI Indicator */}
+                    <div className="flex items-center justify-between rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs border border-emerald-500/20">
+                      <div className="flex items-center gap-1.5">
+                        <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span className="font-semibold text-emerald-950 dark:text-emerald-300">
+                          Gross Yield: {yieldInfo.grossRentalYieldPercent}% / yr
+                        </span>
+                      </div>
+                      <span className="font-mono text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                        ≈ {formatCurrency(yieldInfo.monthlyRentEstimated, "PHP", 0)}/mo rent
+                      </span>
+                    </div>
+
                     {/* Description */}
                     <p className="text-xs leading-relaxed text-muted-foreground line-clamp-2">
                       {prop.description ||
@@ -654,45 +771,63 @@ function ShowcaseStorefrontContent() {
                   </CardContent>
                 </div>
 
-                <CardFooter className="grid grid-cols-4 gap-1.5 border-t bg-muted/20 p-2.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-[10px] px-1 gap-1"
-                    onClick={() => handleOpenTourModal(prop)}
-                  >
-                    <PlayCircle className="h-3 w-3 text-primary shrink-0" />
-                    <span className="truncate">Media Tour</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-[10px] px-1 gap-1 text-primary hover:text-primary"
-                    onClick={() => {
-                      setSelectedSocialProperty(prop);
-                      setIsSocialModalOpen(true);
-                    }}
-                  >
-                    <Share2 className="h-3 w-3 shrink-0" />
-                    <span className="truncate">Social Card</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-[10px] px-1 gap-1"
-                    asChild
-                  >
-                    <Link href={`/trippings?propertyId=${prop.id}`}>
-                      <Calendar className="h-3 w-3 text-primary shrink-0" />
-                      <span className="truncate">Viewing</span>
-                    </Link>
-                  </Button>
-                  <Button size="sm" className="w-full text-[10px] px-1 gap-1" asChild>
-                    <Link href={`/quotations?propertyId=${prop.id}`}>
-                      <Calculator className="h-3 w-3 shrink-0" />
-                      <span className="truncate">Compute</span>
-                    </Link>
-                  </Button>
+                <CardFooter className="flex flex-col gap-2 border-t bg-muted/20 p-2.5">
+                  {/* Top Tier: Virtual Experience & Share */}
+                  <div className="grid grid-cols-3 gap-1.5 w-full">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-[10px] px-1 gap-1"
+                      onClick={() => handleOpenTourModal(prop)}
+                    >
+                      <PlayCircle className="h-3 w-3 text-primary shrink-0" />
+                      <span className="truncate">Media Tour</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-[10px] px-1 gap-1"
+                      onClick={() => handleOpenPanoramaModal(prop)}
+                    >
+                      <RotateCcw className="h-3 w-3 text-primary shrink-0" />
+                      <span className="truncate">360° Tour</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-[10px] px-1 gap-1 text-primary hover:text-primary"
+                      onClick={() => {
+                        setSelectedSocialProperty(prop);
+                        setIsSocialModalOpen(true);
+                      }}
+                    >
+                      <Share2 className="h-3 w-3 shrink-0" />
+                      <span className="truncate">Social Card</span>
+                    </Button>
+                  </div>
+
+                  {/* Bottom Tier: Direct Conversion */}
+                  <div className="grid grid-cols-2 gap-1.5 w-full">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-[11px] gap-1 border-primary/40 text-foreground hover:bg-primary/5 hover:border-primary font-medium"
+                      onClick={() => handleOpenInquiryModal(prop)}
+                    >
+                      <Ticket className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span className="truncate">VIP Pass &amp; Brochure</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="w-full text-[11px] gap-1 font-medium"
+                      asChild
+                    >
+                      <Link href={`/quotations?propertyId=${prop.id}`}>
+                        <Calculator className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">Compute Quote</span>
+                      </Link>
+                    </Button>
+                  </div>
                 </CardFooter>
               </Card>
             );
@@ -726,21 +861,28 @@ function ShowcaseStorefrontContent() {
               </DialogHeader>
 
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-3 h-9">
-                  <TabsTrigger value="photos" className="text-xs gap-1.5">
+                <TabsList className="grid w-full grid-cols-5 h-9">
+                  <TabsTrigger value="photos" className="text-xs gap-1">
                     <ImageIcon className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Photo Gallery (</span>
+                    <span className="hidden sm:inline">Photos (</span>
                     <span>{selectedProperty.galleryImages?.length || 1}</span>
                     <span className="hidden sm:inline">)</span>
                   </TabsTrigger>
-                  <TabsTrigger value="floorplan" className="text-xs gap-1.5">
+                  <TabsTrigger value="floorplan" className="text-xs gap-1">
                     <Compass className="h-3.5 w-3.5 text-primary" />
                     <span>Floor Plan</span>
-                    <span className="hidden sm:inline">&amp; Hotspots</span>
                   </TabsTrigger>
-                  <TabsTrigger value="video" className="text-xs gap-1.5">
+                  <TabsTrigger value="panorama" className="text-xs gap-1">
+                    <RotateCcw className="h-3.5 w-3.5 text-primary" />
+                    <span>360° Tour</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="vicinity" className="text-xs gap-1">
+                    <MapPin className="h-3.5 w-3.5 text-primary" />
+                    <span>Vicinity</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="video" className="text-xs gap-1">
                     <Film className="h-3.5 w-3.5" />
-                    <span>Video Tour</span>
+                    <span>Video</span>
                   </TabsTrigger>
                 </TabsList>
 
@@ -1242,6 +1384,77 @@ function ShowcaseStorefrontContent() {
                   </div>
                 </TabsContent>
 
+                {/* 360 PANORAMA TOUR TAB */}
+                <TabsContent value="panorama" className="mt-3">
+                  <PanoramaViewer propertyName={selectedProperty.projectName} />
+                </TabsContent>
+
+                {/* MASTERPLAN VICINITY & LANDMARKS TAB */}
+                <TabsContent value="vicinity" className="mt-3 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/20 px-3.5 py-2.5">
+                    <div>
+                      <h3 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Navigation className="h-3.5 w-3.5 text-primary" />
+                        Masterplan Vicinity &amp; Proximity Matrix
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground">
+                        Key commercial hubs, lifestyle centers, top healthcare facilities, and transit access points.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5"
+                      asChild
+                    >
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                          `${selectedProperty.projectName} ${selectedProperty.address}`
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="h-3 w-3 text-primary" />
+                        Directions in Google Maps
+                      </a>
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {getPropertyVicinityLandmarks(selectedProperty).map((lm) => (
+                      <div
+                        key={lm.name}
+                        className="flex items-start justify-between gap-3 rounded-lg border bg-card p-3 shadow-sm hover:border-primary/50 transition-colors"
+                      >
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="mt-0.5 rounded-md bg-muted p-1.5">
+                            {getLandmarkCategoryIcon(lm.category)}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-semibold text-foreground truncate">
+                              {lm.name}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-[9px] font-normal px-1.5 py-0 h-4">
+                                {lm.badge}
+                              </Badge>
+                              <span className="text-[10px] text-muted-foreground">{lm.category}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-xs font-bold text-foreground block">
+                            {lm.distanceText}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {lm.travelMinutesText}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </TabsContent>
+
                 {/* VIDEO WALKTHROUGH TAB */}
                 <TabsContent value="video" className="mt-3">
                   {selectedProperty.videoWalkthroughUrl ? (
@@ -1261,6 +1474,57 @@ function ShowcaseStorefrontContent() {
                   )}
                 </TabsContent>
               </Tabs>
+
+              {/* Investment ROI & Yield Metrics */}
+              {(() => {
+                const yieldMetrics = calculatePropertyInvestmentYield(selectedProperty);
+                return (
+                  <div className="rounded-xl border bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <h4 className="text-xs font-bold text-foreground">
+                          Rental Yield &amp; Investment Projections
+                        </h4>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-700 dark:text-emerald-300">
+                        Prime Investment Asset
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                      <div className="rounded-lg bg-background/80 p-2 border">
+                        <span className="text-[10px] text-muted-foreground block">Gross Rental Yield</span>
+                        <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                          {yieldMetrics.grossRentalYieldPercent}% / yr
+                        </span>
+                        <span className="text-[9px] text-muted-foreground block">Est. Market Gross Return</span>
+                      </div>
+                      <div className="rounded-lg bg-background/80 p-2 border">
+                        <span className="text-[10px] text-muted-foreground block">Est. Monthly Lease</span>
+                        <span className="text-sm font-bold text-foreground tabular-nums">
+                          {formatCurrency(yieldMetrics.monthlyRentEstimated, "PHP", 0)}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground block">₱{yieldMetrics.rentRatePerSqm}/sqm market</span>
+                      </div>
+                      <div className="rounded-lg bg-background/80 p-2 border">
+                        <span className="text-[10px] text-muted-foreground block">Annual Capital Growth</span>
+                        <span className="text-sm font-bold text-foreground tabular-nums">
+                          +{yieldMetrics.annualAppreciationRatePercent}% / yr
+                        </span>
+                        <span className="text-[9px] text-muted-foreground block">Historical 5-yr CAGR</span>
+                      </div>
+                      <div className="rounded-lg bg-background/80 p-2 border">
+                        <span className="text-[10px] text-muted-foreground block">Total Projected ROI</span>
+                        <span className="text-sm font-bold text-primary tabular-nums">
+                          {yieldMetrics.projectedTotalAnnualReturnPercent}% / yr
+                        </span>
+                        <span className="text-[9px] text-muted-foreground block">Yield + Capital Appreciation</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Details & Amenities */}
               <div className="space-y-2 border-t pt-3 text-xs">
@@ -1285,25 +1549,268 @@ function ShowcaseStorefrontContent() {
 
               {/* Action Footer */}
               <div className="grid grid-cols-1 gap-2 border-t pt-3 sm:grid-cols-3">
+                <Button
+                  variant="default"
+                  size="sm"
+                  className="text-xs gap-1.5"
+                  onClick={() => handleOpenInquiryModal(selectedProperty)}
+                >
+                  <Ticket className="h-3.5 w-3.5" />
+                  Request VIP Showroom Pass
+                </Button>
                 <Button variant="outline" size="sm" className="text-xs gap-1.5" asChild>
-                  <Link href="/trippings">
+                  <Link href={`/trippings?propertyId=${selectedProperty.id}`}>
                     <CalendarCheck className="h-3.5 w-3.5 text-primary" />
                     Book Site Viewing
                   </Link>
                 </Button>
                 <Button variant="secondary" size="sm" className="text-xs gap-1.5" asChild>
-                  <Link href="/inquire">
-                    <Building2 className="h-3.5 w-3.5" />
-                    Inquire Online
-                  </Link>
-                </Button>
-                <Button size="sm" className="text-xs gap-1.5" asChild>
                   <Link href={`/quotations?propertyId=${selectedProperty.id}`}>
                     <Calculator className="h-3.5 w-3.5" />
                     Customize Quotation
                   </Link>
                 </Button>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* VIP Showroom Pass & Official E-Brochure Modal */}
+      <Dialog
+        open={isInquiryModalOpen}
+        onOpenChange={(open) => {
+          setIsInquiryModalOpen(open);
+          if (!open) {
+            setRegisteredLeadId(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg p-0 overflow-hidden">
+          {inquiryProperty && (
+            <div className="space-y-4 p-5 sm:p-6">
+              <DialogHeader>
+                <div className="flex items-center gap-2 text-primary">
+                  <div className="rounded-full bg-primary/10 p-2">
+                    <Ticket className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-lg font-serif font-normal">
+                      VIP Showroom Pass &amp; Official E-Brochure
+                    </DialogTitle>
+                    <DialogDescription className="text-xs">
+                      Priority unit reservation privileges &amp; full developer architectural packet
+                    </DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              {registeredLeadId ? (
+                /* Confirmation Card */
+                <div className="space-y-4 rounded-xl border bg-muted/10 p-5 text-center">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">
+                    <CheckCircle2 className="h-7 w-7" />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Badge variant="won" className="text-[11px] tracking-wide uppercase px-2 py-0.5">
+                      VIP Pass Confirmed
+                    </Badge>
+                    <h3 className="text-base font-bold text-foreground">
+                      Pass #{registeredLeadId.slice(0, 8).toUpperCase()}
+                    </h3>
+                    <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                      Thank you, <strong className="text-foreground">{inquiryFirstName} {inquiryLastName}</strong>. Your inquiry has been securely registered in the CRM under <strong className="text-foreground">PORTAL_INQUIRY</strong>.
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border bg-background p-3 text-left space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Development:</span>
+                      <span className="font-semibold">{inquiryProperty.projectName} ({inquiryProperty.unitCode})</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Developer:</span>
+                      <span>{inquiryProperty.developerName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">List Price:</span>
+                      <span className="font-semibold text-primary">{formatCurrency(inquiryProperty.listPrice, "PHP", 0)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Delivery:</span>
+                      <span className="text-emerald-600 font-medium">Digital brochure sent to {inquiryPhone}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 pt-2">
+                    <Button
+                      size="sm"
+                      className="w-full text-xs gap-1.5"
+                      asChild
+                    >
+                      <Link href={`/quotations?propertyId=${inquiryProperty.id}`}>
+                        <Calculator className="h-3.5 w-3.5" />
+                        Simulate Payment Terms &amp; Computation
+                      </Link>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-xs"
+                      onClick={() => setIsInquiryModalOpen(false)}
+                    >
+                      Close Window
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                /* Inquiry Registration Form */
+                <form onSubmit={handleSubmitInquiry} className="space-y-4">
+                  {/* Property Mini Header */}
+                  <div className="flex items-center gap-3 rounded-lg border bg-muted/20 p-2.5">
+                    <img
+                      src={getSafePropertyImageUrl(
+                        inquiryProperty.thumbnailUrl || inquiryProperty.galleryImages?.[0],
+                        inquiryProperty.propertyType
+                      )}
+                      alt={inquiryProperty.projectName}
+                      className="h-12 w-14 rounded-md object-cover border"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-xs font-bold truncate">
+                        {inquiryProperty.projectName} — {inquiryProperty.unitCode}
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground truncate">
+                        {inquiryProperty.locationCity} • {inquiryProperty.propertyType}
+                      </p>
+                      <span className="text-xs font-bold text-primary">
+                        {formatCurrency(inquiryProperty.listPrice, "PHP", 0)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Form fields */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">First Name *</Label>
+                      <Input
+                        required
+                        value={inquiryFirstName}
+                        onChange={(e) => setInquiryFirstName(e.target.value)}
+                        placeholder="e.g. Maria"
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Last Name *</Label>
+                      <Input
+                        required
+                        value={inquiryLastName}
+                        onChange={(e) => setInquiryLastName(e.target.value)}
+                        placeholder="e.g. Santos"
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Mobile (WhatsApp/Viber) *</Label>
+                      <Input
+                        required
+                        value={inquiryPhone}
+                        onChange={(e) => setInquiryPhone(e.target.value)}
+                        placeholder="+63 917 123 4567"
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Email Address</Label>
+                      <Input
+                        type="email"
+                        value={inquiryEmail}
+                        onChange={(e) => setInquiryEmail(e.target.value)}
+                        placeholder="maria@example.com"
+                        className="h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Buying Timeline</Label>
+                      <select
+                        value={inquiryIntent}
+                        onChange={(e) => setInquiryIntent(e.target.value)}
+                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none"
+                      >
+                        <option value="INVESTMENT_3_6M">Investment (3-6 Months)</option>
+                        <option value="IMMEDIATE_RFO">Immediate Move-in (RFO)</option>
+                        <option value="RETIREMENT_FAMILY">Primary Family Home</option>
+                        <option value="OFW_OVERSEAS">Overseas OFW Portfolio</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">Preferred Financing</Label>
+                      <select
+                        value={inquiryFinancing}
+                        onChange={(e) =>
+                          setInquiryFinancing(
+                            e.target.value as
+                              | "BANK"
+                              | "SPOT_CASH"
+                              | "PAG_IBIG"
+                              | "IN_HOUSE"
+                          )
+                        }
+                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus:outline-none"
+                      >
+                        <option value="BANK">Bank Financing</option>
+                        <option value="SPOT_CASH">Spot Cash (Full Discount)</option>
+                        <option value="PAG_IBIG">Pag-IBIG Housing Loan</option>
+                        <option value="IN_HOUSE">Developer In-House</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground">
+                    🔒 Secure submission. Your inquiry directly alerts accredited property consultants and issues priority viewing credentials.
+                  </p>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-xs"
+                      onClick={() => setIsInquiryModalOpen(false)}
+                      disabled={isSubmittingInquiry}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="text-xs gap-1.5"
+                      disabled={isSubmittingInquiry}
+                    >
+                      {isSubmittingInquiry ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Registering Pass...
+                        </>
+                      ) : (
+                        <>
+                          <Ticket className="h-3.5 w-3.5" />
+                          Confirm VIP Pass &amp; Get Brochure
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
         </DialogContent>
