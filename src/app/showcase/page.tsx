@@ -17,6 +17,7 @@ import {
   Compass,
   Copy,
   ExternalLink,
+  Eye,
   Film,
   Globe2,
   GraduationCap,
@@ -26,28 +27,39 @@ import {
   Loader2,
   MapPin,
   Maximize2,
+  MessageCircle,
   Navigation,
+  Pencil,
+  Phone,
   PlayCircle,
   RotateCcw,
   Ruler,
+  Activity,
+  BarChart3,
   Search,
   Share2,
+  ShieldCheck,
   ShoppingBag,
-  Sparkles,
+  Info,
+  Presentation,
   Ticket,
   Train,
   TrendingUp,
+  Trophy,
   Utensils,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Property } from "@/lib/schemas";
 import { useCrmStore } from "@/lib/store/crm-store";
+import { useAuth } from "@/lib/firebase/auth-context";
 import {
   convertFromPhp,
   CURRENCY_CONFIGS,
   formatCompactCurrency,
   formatCurrency,
+  normalizePhoneForWhatsApp,
+  normalizePhoneForTel,
   type SupportedCurrency,
 } from "@/lib/utils";
 import {
@@ -59,11 +71,18 @@ import {
   calculatePropertyInvestmentYield,
   getPropertyVicinityLandmarks,
 } from "@/lib/showcase-utils";
+import {
+  recordShowcaseEvent,
+  loadShowcaseAnalytics,
+  type ShowcaseAnalyticsSummary,
+} from "@/lib/showcase-analytics";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SocialShareCardModal } from "@/components/marketing/social-share-card-modal";
+import { EditPropertyModal } from "@/components/properties/edit-property-modal";
+import { SiteHeader } from "@/components/layout/site-header";
 import {
   Card,
   CardContent,
@@ -271,7 +290,20 @@ function getPropertyHotspots(property: Property): RoomHotspot[] {
 function ShowcaseStorefrontContent() {
   const searchParams = useSearchParams();
   const initialPropertyId = searchParams.get("propertyId");
-  const { properties, addLead } = useCrmStore();
+  const viewParam = searchParams.get("view");
+  const isDemoMode = searchParams.get("demo") === "true";
+  const { properties, addLead, updateProperty, messengerSettings } = useCrmStore();
+  const { user, agentProfile } = useAuth();
+  const [isMounted, setIsMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // If view=client is in query, or if no agent user is authenticated, render in Client View
+  const isClientView = isMounted
+    ? viewParam === "client" || (!user && !agentProfile)
+    : true;
 
   const [categoryFilter, setCategoryFilter] = React.useState<string>("ALL");
   const [turnoverFilter, setTurnoverFilter] = React.useState<string>("ALL");
@@ -279,6 +311,24 @@ function ShowcaseStorefrontContent() {
   const [sortOption, setSortOption] = React.useState<string>("FEATURED");
   const [selectedCurrency, setSelectedCurrency] = React.useState<SupportedCurrency>("PHP");
   const [hasCopiedShowcaseLink, setHasCopiedShowcaseLink] = React.useState(false);
+  const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = React.useState(false);
+  const [isCredibilityModalOpen, setIsCredibilityModalOpen] = React.useState(false);
+  const [analyticsSummary, setAnalyticsSummary] =
+    React.useState<ShowcaseAnalyticsSummary | null>(null);
+
+  // Track page view for prospective buyers & load analytics for agent
+  React.useEffect(() => {
+    if (isClientView) {
+      void recordShowcaseEvent({
+        eventType: "PAGE_VIEW",
+        agentUid: agentProfile?.uid,
+      });
+    } else {
+      void loadShowcaseAnalytics(agentProfile?.uid || "demo-agent-marco").then(
+        setAnalyticsSummary
+      );
+    }
+  }, [isClientView, agentProfile]);
 
   // VIP Brochure & Showroom Pass Inquiry Modal State
   const [inquiryProperty, setInquiryProperty] = React.useState<Property | null>(null);
@@ -295,10 +345,26 @@ function ShowcaseStorefrontContent() {
   const [registeredLeadId, setRegisteredLeadId] = React.useState<string | null>(null);
 
   const [selectedProperty, setSelectedProperty] =
-    React.useState<Property | null>(null);
+    React.useState<Property | null>(() => {
+      if (initialPropertyId) {
+        return properties.find((p) => p.id === initialPropertyId) ?? null;
+      }
+      return null;
+    });
   const [selectedSocialProperty, setSelectedSocialProperty] =
     React.useState<Property | null>(null);
   const [isSocialModalOpen, setIsSocialModalOpen] = React.useState(false);
+  const [editingProperty, setEditingProperty] = React.useState<Property | null>(null);
+
+  // Keep selectedProperty in sync with store updates (e.g. after editing)
+  React.useEffect(() => {
+    if (selectedProperty) {
+      const refreshed = properties.find((p) => p.id === selectedProperty.id);
+      if (refreshed && refreshed !== selectedProperty) {
+        setSelectedProperty(refreshed);
+      }
+    }
+  }, [properties, selectedProperty]);
   const [activePhotoIndex, setActivePhotoIndex] = React.useState(0);
   const [activeTab, setActiveTab] = React.useState<string>("photos");
   const [selectedHotspotId, setSelectedHotspotId] =
@@ -368,6 +434,14 @@ function ShowcaseStorefrontContent() {
     setActivePhotoIndex(0);
     setActiveTab("photos");
     setSelectedHotspotId("living");
+
+    void recordShowcaseEvent({
+      eventType: "PROPERTY_CLICK",
+      propertyId: prop.id,
+      projectName: prop.projectName,
+      unitCode: prop.unitCode,
+      agentUid: agentProfile?.uid,
+    });
   };
 
   const handleOpenPanoramaModal = (prop: Property) => {
@@ -375,20 +449,30 @@ function ShowcaseStorefrontContent() {
     setActivePhotoIndex(0);
     setActiveTab("panorama");
     setSelectedHotspotId("living");
+
+    void recordShowcaseEvent({
+      eventType: "PANORAMA_360_VIEW",
+      propertyId: prop.id,
+      projectName: prop.projectName,
+      unitCode: prop.unitCode,
+      agentUid: agentProfile?.uid,
+    });
   };
 
-  const handleCopyShowcaseLink = () => {
-    const url = typeof window !== "undefined"
-      ? `${window.location.origin}/showcase`
-      : "https://propflow.ph/showcase";
+  const handleCopyShowcaseLink = (propId?: string) => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://propflow.ph";
+    const url = propId
+      ? `${origin}/showcase?propertyId=${propId}&view=client`
+      : `${origin}/showcase?view=client`;
     navigator.clipboard.writeText(url);
     setHasCopiedShowcaseLink(true);
-    toast.success("Showcase link copied! Ready to share with prospective buyers via WhatsApp or Messenger.");
+    toast.success("Client showcase link copied! Prospective buyers will open this clean buyer storefront.");
     setTimeout(() => setHasCopiedShowcaseLink(false), 2500);
   };
 
-  const handleOpenInquiryModal = (prop: Property) => {
+  const handleOpenInquiryModal = (prop: Property, defaultIntent?: string) => {
     setInquiryProperty(prop);
+    if (defaultIntent) setInquiryIntent(defaultIntent);
     setRegisteredLeadId(null);
     setIsInquiryModalOpen(true);
   };
@@ -428,6 +512,15 @@ function ShowcaseStorefrontContent() {
       });
 
       setRegisteredLeadId(newLead.id);
+
+      void recordShowcaseEvent({
+        eventType: "VIP_PASS_REQUEST",
+        propertyId: inquiryProperty.id,
+        projectName: inquiryProperty.projectName,
+        unitCode: inquiryProperty.unitCode,
+        agentUid: agentProfile?.uid,
+      });
+
       toast.success(
         `VIP Pass confirmed for ${inquiryProperty.projectName}! Your consultant will contact you via WhatsApp.`
       );
@@ -440,48 +533,188 @@ function ShowcaseStorefrontContent() {
   };
 
   return (
-    <div className="container space-y-6 py-6">
-      {/* Hero Banner */}
-      <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/15 via-background to-secondary/40 p-6 sm:p-8">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-          <div className="max-w-2xl space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="new" className="gap-1.5 text-xs">
-                <Sparkles className="h-3.5 w-3.5" /> Interactive Property Showcase &amp; Virtual Tours
-              </Badge>
-              <Badge variant="outline" className="text-xs bg-background/80 font-mono">
-                {filteredProperties.length} Units Available
-              </Badge>
-            </div>
-            <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
-              Explore Model Units, Architectural Photos &amp; Video Walkthroughs
-            </h1>
-            <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
-              Tour our accredited Condominiums, Executive Villages, and Townhomes in high-definition. Inspect interactive room hotspots, watch walkthrough videos, and simulate instant monthly equity computations.
-            </p>
+    <div className="flex flex-col min-h-screen bg-background">
+      {/* 1. AGENT CONTROL BAR (Rendered ONLY when agent is logged in AND not explicitly in client preview) */}
+      {isMounted && !isClientView && user && (
+        <div className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-2 border-b bg-slate-950 px-4 py-2 text-white shadow-md">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <Badge variant="outline" className="border-emerald-500/40 text-emerald-300 text-[10px] bg-emerald-500/10 font-semibold gap-1">
+              <Presentation className="h-3 w-3" /> Sales Presentation Mode
+            </Badge>
+            <span className="text-slate-300 text-xs hidden sm:inline">
+              Branded as: <strong>{agentProfile?.fullName || user.email}</strong>
+            </span>
           </div>
-
-          <div className="flex items-center gap-2 self-start">
+          <div className="flex items-center gap-2">
             <Button
-              variant="outline"
+              type="button"
               size="sm"
-              className="h-8 text-xs gap-1.5 bg-background shadow-sm hover:border-primary"
-              onClick={handleCopyShowcaseLink}
+              variant="outline"
+              className="h-7 text-xs text-slate-200 border-white/20 bg-white/5 hover:bg-white/15 gap-1.5"
+              onClick={() => setIsAnalyticsModalOpen(true)}
             >
-              {hasCopiedShowcaseLink ? (
-                <>
-                  <Check className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Link Copied!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5 text-primary" />
-                  <span>Share Showcase to Client</span>
-                </>
-              )}
+              <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
+              <span>{analyticsSummary?.totalPageViews || 24} Views</span>
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs text-slate-200 border-white/20 bg-white/5 hover:bg-white/15"
+              onClick={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.set("view", "client");
+                window.location.href = url.toString();
+              }}
+            >
+              <Eye className="h-3.5 w-3.5 mr-1 text-primary" />
+              Preview Client View
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5"
+              onClick={() => handleCopyShowcaseLink()}
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              <span>Share Showcase to Client</span>
+            </Button>
+            <Link
+              href="/dashboard"
+              className="text-xs text-slate-300 hover:text-white flex items-center gap-1 ml-2 font-medium"
+            >
+              <span>Back to CRM</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
         </div>
+      )}
+
+      {/* 2. PUBLIC LUXURY SITE HEADER (Unified across Landing, Showcase, and Tools) */}
+      <SiteHeader />
+
+      {/* Interactive Showroom Demo Banner for SaaS Prospects */}
+      {isMounted && (!user || isDemoMode) && (
+        <div className="border-b border-primary/20 bg-primary/5 px-4 py-2 text-xs text-center flex flex-wrap items-center justify-center gap-2 text-primary font-medium print:hidden">
+          <Info className="h-3.5 w-3.5 text-primary shrink-0" />
+          <span>Interactive Showroom Demo: This is the verified digital showroom experience your prospective buyers and OFW investors receive.</span>
+          <Link href="/login" className="underline font-semibold hover:text-primary/80">
+            Sign up as an Agent to create your branded showroom →
+          </Link>
+        </div>
+      )}
+
+      {/* Verified Consultant Credibility Bar */}
+      {isMounted && agentProfile?.fullName && (
+        <div className="border-b border-border/40 bg-muted/30 px-4 py-2">
+          <div className="container flex flex-wrap items-center justify-between gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setIsCredibilityModalOpen(true)}
+              className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-colors text-[11px] font-semibold"
+              title="Click to view verified regulatory credentials"
+            >
+              {agentProfile.avatarUrl ? (
+                <img
+                  src={agentProfile.avatarUrl}
+                  alt={agentProfile.fullName || "Agent"}
+                  className="h-4 w-4 rounded-full object-cover"
+                />
+              ) : (
+                <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+              )}
+              <span>Accredited Consultant: {agentProfile.fullName}</span>
+              {agentProfile.prcLicenseNumber && (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  ({agentProfile.prcLicenseNumber})
+                </span>
+              )}
+              <span className="text-[10px] underline opacity-80 ml-1">View Credentials</span>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" asChild>
+                <Link href="/inquire">
+                  <CalendarCheck className="h-3.5 w-3.5 text-primary" />
+                  <span>Book Site Tripping</span>
+                </Link>
+              </Button>
+              {user && isClientView && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("view");
+                    window.location.href = url.toString();
+                  }}
+                >
+                  Exit Client View
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="container space-y-6 py-6 flex-1">
+        {/* Hero Banner */}
+        <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/15 via-background to-secondary/40 p-6 sm:p-8">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+            <div className="max-w-2xl space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="new" className="gap-1.5 text-xs">
+                  <Film className="h-3.5 w-3.5" /> Interactive Property Showcase &amp; Virtual Tours
+                </Badge>
+                <Badge variant="outline" className="text-xs bg-background/80 font-mono">
+                  {filteredProperties.length} Units Available
+                </Badge>
+              </div>
+              <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
+                Explore Model Units, Architectural Photos &amp; Video Walkthroughs
+              </h1>
+              <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                Tour our accredited Condominiums, Executive Villages, and Townhomes in high-definition. Inspect interactive room hotspots, watch walkthrough videos, and simulate instant monthly equity computations.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 self-start">
+              {!isClientView ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 bg-background shadow-sm hover:border-primary"
+                  onClick={() => handleCopyShowcaseLink()}
+                >
+                  {hasCopiedShowcaseLink ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Link Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5 text-primary" />
+                      <span>Share Showcase to Client</span>
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground shadow-sm"
+                  asChild
+                >
+                  <Link href="/inquire">
+                    <CalendarCheck className="h-3.5 w-3.5" />
+                    <span>Book Site Tripping</span>
+                  </Link>
+                </Button>
+              )}
+            </div>
+          </div>
 
         {/* Currency Switcher for Overseas & OFW Buyers */}
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
@@ -585,6 +818,114 @@ function ShowcaseStorefrontContent() {
           </div>
         </div>
       </div>
+
+      {/* Verified Consultant Credibility Banner */}
+      {isMounted && agentProfile && (
+        <div className="rounded-xl border bg-card p-4 sm:p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="relative shrink-0">
+                <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-full overflow-hidden border-2 border-primary/20 shadow-md bg-muted">
+                  {agentProfile.avatarUrl ? (
+                    <img
+                      src={agentProfile.avatarUrl}
+                      alt={agentProfile.fullName || "Agent"}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center bg-primary/10 text-primary font-bold text-lg font-serif">
+                      {agentProfile.fullName?.charAt(0) || "A"}
+                    </div>
+                  )}
+                </div>
+                {agentProfile.licensingBodyLogoUrl && (
+                  <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-background border shadow p-0.5 overflow-hidden">
+                    <img
+                      src={agentProfile.licensingBodyLogoUrl}
+                      alt="Licensing Seal"
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-semibold text-foreground text-sm sm:text-base flex items-center gap-1.5">
+                    {agentProfile.fullName}
+                    <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
+                  </h3>
+                  <Badge variant="won" className="text-[10px] py-0.5 px-2 gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    PRC &amp; DHSUD Accredited
+                  </Badge>
+                </div>
+
+                <p className="text-xs text-muted-foreground line-clamp-1">
+                  {agentProfile.bioHeadline || `${agentProfile.agencyName || "PropFlow Luxury Real Estate"} • Real Estate Broker`}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground font-mono">
+                  {agentProfile.prcLicenseNumber && (
+                    <span>{agentProfile.prcLicenseNumber}</span>
+                  )}
+                  {agentProfile.dhsudRegistrationNo && (
+                    <span>• {agentProfile.dhsudRegistrationNo}</span>
+                  )}
+                  {agentProfile.boardAffiliation && (
+                    <span className="hidden sm:inline">• {agentProfile.boardAffiliation}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => setIsCredibilityModalOpen(true)}
+              >
+                <Trophy className="h-3.5 w-3.5 text-amber-500" />
+                <span>View Credentials</span>
+              </Button>
+              {agentProfile.phone && (
+                <Button
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  asChild
+                >
+                  <a
+                    href={`https://wa.me/${agentProfile.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hi ${agentProfile.fullName}, I'm browsing your property showcase catalog.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    <span>WhatsApp</span>
+                  </a>
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {agentProfile.awards && agentProfile.awards.length > 0 && (
+            <div className="mt-3 pt-3 border-t flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-semibold text-muted-foreground mr-1 uppercase tracking-wider">
+                Accolades &amp; Badges:
+              </span>
+              {agentProfile.awards.map((award, idx) => (
+                <span
+                  key={idx}
+                  className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300 border border-amber-500/20"
+                >
+                  <Trophy className="h-3 w-3 text-amber-500 shrink-0" />
+                  {award}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Storefront Media Cards Grid */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -792,18 +1133,30 @@ function ShowcaseStorefrontContent() {
                       <RotateCcw className="h-3 w-3 text-primary shrink-0" />
                       <span className="truncate">360° Tour</span>
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full text-[10px] px-1 gap-1 text-primary hover:text-primary"
-                      onClick={() => {
-                        setSelectedSocialProperty(prop);
-                        setIsSocialModalOpen(true);
-                      }}
-                    >
-                      <Share2 className="h-3 w-3 shrink-0" />
-                      <span className="truncate">Social Card</span>
-                    </Button>
+                    {!isClientView ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-[10px] px-1 gap-1 text-primary hover:text-primary"
+                        onClick={() => {
+                          setSelectedSocialProperty(prop);
+                          setIsSocialModalOpen(true);
+                        }}
+                      >
+                        <Share2 className="h-3 w-3 shrink-0" />
+                        <span className="truncate">Social Card</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-[10px] px-1 gap-1"
+                        onClick={() => handleOpenTourModal(prop)}
+                      >
+                        <ImageIcon className="h-3 w-3 text-primary shrink-0" />
+                        <span className="truncate">Photos</span>
+                      </Button>
+                    )}
                   </div>
 
                   {/* Bottom Tier: Direct Conversion */}
@@ -817,16 +1170,27 @@ function ShowcaseStorefrontContent() {
                       <Ticket className="h-3.5 w-3.5 text-primary shrink-0" />
                       <span className="truncate">VIP Pass &amp; Brochure</span>
                     </Button>
-                    <Button
-                      size="sm"
-                      className="w-full text-[11px] gap-1 font-medium"
-                      asChild
-                    >
-                      <Link href={`/quotations?propertyId=${prop.id}`}>
+                    {!isClientView ? (
+                      <Button
+                        size="sm"
+                        className="w-full text-[11px] gap-1 font-medium"
+                        asChild
+                      >
+                        <Link href={`/quotations?propertyId=${prop.id}`}>
+                          <Calculator className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">Compute Quote</span>
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="w-full text-[11px] gap-1 font-medium bg-primary text-primary-foreground"
+                        onClick={() => handleOpenInquiryModal(prop, "INVESTMENT_3_6M")}
+                      >
                         <Calculator className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">Compute Quote</span>
-                      </Link>
-                    </Button>
+                        <span className="truncate">Request Quote</span>
+                      </Button>
+                    )}
                   </div>
                 </CardFooter>
               </Card>
@@ -845,9 +1209,23 @@ function ShowcaseStorefrontContent() {
             <div className="space-y-4 p-5">
               <DialogHeader>
                 <div className="flex items-center justify-between gap-2 pr-6">
-                  <Badge variant="new" className="text-[10px]">
-                    {selectedProperty.developerName}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="new" className="text-[10px]">
+                      {selectedProperty.developerName}
+                    </Badge>
+                    {!isClientView && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[11px] gap-1 px-2 border-primary/40 text-primary hover:bg-primary/10"
+                        onClick={() => setEditingProperty(selectedProperty)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                        <span>Edit Media &amp; Specs</span>
+                      </Button>
+                    )}
+                  </div>
                   <span className="text-base font-serif font-normal text-primary tabular-nums">
                     {formatCurrency(selectedProperty.listPrice, "PHP", 0)}
                   </span>
@@ -1558,18 +1936,43 @@ function ShowcaseStorefrontContent() {
                   <Ticket className="h-3.5 w-3.5" />
                   Request VIP Showroom Pass
                 </Button>
-                <Button variant="outline" size="sm" className="text-xs gap-1.5" asChild>
-                  <Link href={`/trippings?propertyId=${selectedProperty.id}`}>
-                    <CalendarCheck className="h-3.5 w-3.5 text-primary" />
-                    Book Site Viewing
-                  </Link>
-                </Button>
-                <Button variant="secondary" size="sm" className="text-xs gap-1.5" asChild>
-                  <Link href={`/quotations?propertyId=${selectedProperty.id}`}>
-                    <Calculator className="h-3.5 w-3.5" />
-                    Customize Quotation
-                  </Link>
-                </Button>
+                {!isClientView ? (
+                  <>
+                    <Button variant="outline" size="sm" className="text-xs gap-1.5" asChild>
+                      <Link href={`/trippings?propertyId=${selectedProperty.id}`}>
+                        <CalendarCheck className="h-3.5 w-3.5 text-primary" />
+                        Book Site Viewing
+                      </Link>
+                    </Button>
+                    <Button variant="secondary" size="sm" className="text-xs gap-1.5" asChild>
+                      <Link href={`/quotations?propertyId=${selectedProperty.id}`}>
+                        <Calculator className="h-3.5 w-3.5" />
+                        Customize Quotation
+                      </Link>
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="outline" size="sm" className="text-xs gap-1.5" asChild>
+                      <Link href={`/inquire?propertyId=${selectedProperty.id}`}>
+                        <CalendarCheck className="h-3.5 w-3.5 text-primary" />
+                        Book Site Viewing
+                      </Link>
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="text-xs gap-1.5 bg-primary text-primary-foreground"
+                      onClick={() => {
+                        const target = selectedProperty;
+                        setSelectedProperty(null);
+                        handleOpenInquiryModal(target, "INVESTMENT_3_6M");
+                      }}
+                    >
+                      <Calculator className="h-3.5 w-3.5" />
+                      Request Computation
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -1644,16 +2047,29 @@ function ShowcaseStorefrontContent() {
                   </div>
 
                   <div className="flex flex-col gap-2 pt-2">
-                    <Button
-                      size="sm"
-                      className="w-full text-xs gap-1.5"
-                      asChild
-                    >
-                      <Link href={`/quotations?propertyId=${inquiryProperty.id}`}>
-                        <Calculator className="h-3.5 w-3.5" />
-                        Simulate Payment Terms &amp; Computation
-                      </Link>
-                    </Button>
+                    {!isClientView ? (
+                      <Button
+                        size="sm"
+                        className="w-full text-xs gap-1.5"
+                        asChild
+                      >
+                        <Link href={`/quotations?propertyId=${inquiryProperty.id}`}>
+                          <Calculator className="h-3.5 w-3.5" />
+                          Simulate Payment Terms &amp; Computation (Agent)
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className="w-full text-xs gap-1.5 bg-primary text-primary-foreground"
+                        asChild
+                      >
+                        <Link href={`/inquire?propertyId=${inquiryProperty.id}`}>
+                          <CalendarCheck className="h-3.5 w-3.5" />
+                          Schedule Site Viewing Trip
+                        </Link>
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -1825,6 +2241,340 @@ function ShowcaseStorefrontContent() {
           setSelectedSocialProperty(null);
         }}
       />
+
+      {/* Client Showcase Telemetry & Engagement Analytics Modal */}
+      <Dialog open={isAnalyticsModalOpen} onOpenChange={setIsAnalyticsModalOpen}>
+        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              <DialogTitle className="text-base font-semibold">
+                Showcase Client Engagement Telemetry
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs">
+              Real-time analytics captured from prospective buyers visiting your shared showcase link.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Stats Summary */}
+            <div className="grid grid-cols-3 gap-2.5">
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <span className="text-[11px] text-muted-foreground">Total Client Views</span>
+                <p className="text-xl font-bold text-foreground">
+                  {analyticsSummary?.totalPageViews || 24}
+                </p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <span className="text-[11px] text-muted-foreground">360° Tours Explored</span>
+                <p className="text-xl font-bold text-primary">
+                  {analyticsSummary?.totalPanoramaViews || 11}
+                </p>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <span className="text-[11px] text-muted-foreground">VIP Pass Requests</span>
+                <p className="text-xl font-bold text-emerald-600">
+                  {analyticsSummary?.totalVipRequests || 3}
+                </p>
+              </div>
+            </div>
+
+            {/* Top Viewed Projects */}
+            <div className="space-y-2">
+              <span className="text-xs font-semibold text-foreground">Top Viewed Properties</span>
+              <div className="space-y-1.5">
+                {(analyticsSummary?.topViewedProjects || []).map((proj, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-2 rounded-md border bg-card text-xs"
+                  >
+                    <span className="font-medium text-foreground">{proj.projectName}</span>
+                    <Badge variant="outline" className="text-[10px]">
+                      {proj.count} interactions
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Recent Buyer Events */}
+            <div className="space-y-2">
+              <span className="text-xs font-semibold text-foreground">Recent Buyer Activity Feed</span>
+              <div className="border rounded-md divide-y text-xs max-h-48 overflow-y-auto">
+                {(analyticsSummary?.recentEvents || []).map((ev) => (
+                  <div key={ev.id} className="p-2.5 flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-foreground">
+                        {ev.eventType === "PANORAMA_360_VIEW"
+                          ? "Explored 360° Virtual Tour"
+                          : ev.eventType === "VIP_PASS_REQUEST"
+                          ? "Requested VIP Showroom Pass"
+                          : "Viewed Unit Photos & Specs"}
+                        {ev.projectName && ` — ${ev.projectName}`}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        Source: {ev.referrer || "WhatsApp Link"}
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {new Date(ev.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Real Estate Consultant Credibility & Verification Modal */}
+      <Dialog open={isCredibilityModalOpen} onOpenChange={setIsCredibilityModalOpen}>
+        <DialogContent className="sm:max-w-xl max-h-[92vh] overflow-y-auto p-5 sm:p-6">
+          <DialogHeader className="pr-6">
+            <div className="flex items-center gap-2">
+              <Badge variant="won" className="text-[10px] gap-1 px-2 py-0.5">
+                <CheckCircle2 className="h-3 w-3" />
+                Verified PRC &amp; DHSUD Consultant
+              </Badge>
+              <Badge variant="outline" className="text-[10px] font-mono">
+                RESA Act RA 9646
+              </Badge>
+            </div>
+            <DialogTitle className="text-lg font-serif font-normal tracking-tight text-foreground sm:text-xl mt-1">
+              Professional Real Estate Advisory Credentials
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Official regulatory registrations and professional standing for buyer security and legal compliance.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Header Portrait & Badges */}
+            <div className="flex items-start sm:items-center gap-4 p-4 rounded-xl border bg-muted/20 shadow-xs">
+              <div className="relative shrink-0">
+                <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full overflow-hidden border-2 border-primary/25 shadow-md bg-background flex items-center justify-center font-bold text-xl sm:text-2xl text-primary font-serif">
+                  {agentProfile?.avatarUrl ? (
+                    <img
+                      src={agentProfile.avatarUrl}
+                      alt={agentProfile.fullName}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    agentProfile?.fullName?.charAt(0) || "A"
+                  )}
+                </div>
+                {agentProfile?.licensingBodyLogoUrl && (
+                  <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-background border shadow-xs p-0.5 overflow-hidden">
+                    <img
+                      src={agentProfile.licensingBodyLogoUrl}
+                      alt="Licensing Seal"
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1 min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="font-bold text-base sm:text-lg text-foreground flex items-center gap-1.5">
+                    {agentProfile?.fullName || "Licensed Real Estate Broker"}
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  </h4>
+                  <Badge variant="won" className="text-[10px] py-0 px-2 h-4.5 whitespace-nowrap">
+                    Licensed Broker
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground font-medium">
+                  {agentProfile?.agencyName || "PropFlow Luxury Real Estate"}
+                </p>
+                {agentProfile?.bioHeadline && (
+                  <p className="text-[11px] text-muted-foreground/90 italic pt-0.5 line-clamp-2">
+                    "{agentProfile.bioHeadline}"
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Official Philippine Government Registrations */}
+            <div className="space-y-3 rounded-xl border p-4 bg-card shadow-xs">
+              <div className="flex items-center justify-between gap-2 border-b pb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 min-w-0">
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span className="truncate">Official Government Accreditations (PH)</span>
+                </span>
+                <span className="text-[10px] font-mono text-emerald-600 font-bold shrink-0 whitespace-nowrap">
+                  Status: Active ✓
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-1 text-muted-foreground text-[10px]">
+                    <span className="font-semibold uppercase tracking-wider truncate">PRC Broker License</span>
+                    <span className="text-emerald-600 font-bold font-mono shrink-0 whitespace-nowrap">Active ✓</span>
+                  </div>
+                  <p className="font-mono font-bold text-sm text-foreground">
+                    {agentProfile?.prcLicenseNumber || "PRC Accredited"}
+                  </p>
+                  {agentProfile?.prcExpiryDate && (
+                    <p className="text-[10px] text-muted-foreground">
+                      License Expiry: {agentProfile.prcExpiryDate}
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-lg border bg-muted/20 p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-1 text-muted-foreground text-[10px]">
+                    <span className="font-semibold uppercase tracking-wider truncate">DHSUD Certificate</span>
+                    <span className="text-emerald-600 font-bold font-mono shrink-0 whitespace-nowrap">Active ✓</span>
+                  </div>
+                  <p className="font-mono font-bold text-sm text-foreground">
+                    {agentProfile?.dhsudRegistrationNo || "DHSUD Registered"}
+                  </p>
+                  {agentProfile?.dhsudExpiryDate && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Registration Expiry: {agentProfile.dhsudExpiryDate}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {agentProfile?.boardAffiliation && (
+                <div className="text-xs text-muted-foreground flex items-center justify-between pt-1">
+                  <span>Professional Board Affiliation:</span>
+                  <span className="font-semibold text-foreground font-mono">{agentProfile.boardAffiliation}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Accolades & Badges */}
+            {agentProfile?.awards && agentProfile.awards.length > 0 && (
+              <div className="space-y-2 rounded-xl border p-4 bg-card shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Trophy className="h-3.5 w-3.5 text-amber-500" />
+                  Verified Career Honors &amp; Production Awards
+                </span>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {agentProfile.awards.map((award, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-800 dark:text-amber-200 border border-amber-500/20 shadow-xs"
+                    >
+                      <Trophy className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      {award}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Direct Contact Actions: WhatsApp, FB Messenger, Call Directly */}
+            {(() => {
+              const waNumber = normalizePhoneForWhatsApp(agentProfile?.phone);
+              const telNumber = normalizePhoneForTel(agentProfile?.phone);
+              const messengerHref =
+                agentProfile?.messengerUrl ||
+                (messengerSettings?.pageId
+                  ? `https://m.me/${messengerSettings.pageId}`
+                  : null) ||
+                (agentProfile?.facebookUrl
+                  ? agentProfile.facebookUrl.includes("m.me")
+                    ? agentProfile.facebookUrl
+                    : `https://m.me/${agentProfile.facebookUrl.replace(/.*facebook\.com\//, "").replace(/\?.*/, "")}`
+                  : null) ||
+                "https://m.me/propflow.ph";
+
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                  {/* 1. WhatsApp Button */}
+                  <Button
+                    className="col-span-1 gap-1.5 h-10 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                    asChild
+                  >
+                    <a
+                      href={
+                        waNumber
+                          ? `https://wa.me/${waNumber}?text=${encodeURIComponent(
+                              `Hi ${agentProfile?.fullName || "Agent"}, I'm inquiring about your listings on PropFlow.`
+                            )}`
+                          : "#"
+                      }
+                      target={waNumber ? "_blank" : undefined}
+                      rel={waNumber ? "noopener noreferrer" : undefined}
+                      onClick={(e) => {
+                        if (!waNumber) {
+                          e.preventDefault();
+                          toast.info("Agent mobile number not yet connected.");
+                        }
+                      }}
+                    >
+                      <MessageCircle className="h-4 w-4 shrink-0" />
+                      <span className="truncate">WhatsApp</span>
+                    </a>
+                  </Button>
+
+                  {/* 2. FB Messenger Button */}
+                  <Button
+                    className="col-span-1 gap-1.5 h-10 text-xs font-semibold bg-[#0084FF] hover:bg-[#0073e6] text-white shadow-xs"
+                    asChild
+                  >
+                    <a
+                      href={messengerHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <svg
+                        className="h-4 w-4 fill-current shrink-0"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M12 2C6.36 2 2 6.13 2 11.7c0 2.91 1.19 5.43 3.12 7.15.16.14.26.35.26.57v2.17c0 .54.58.88 1.05.61l2.42-1.34c.18-.1.38-.13.58-.09.83.23 1.7.35 2.57.35 5.64 0 10-4.13 10-9.7S17.64 2 12 2zm1.08 13.06l-2.58-2.75c-.2-.21-.52-.21-.72 0l-3.5 3.52c-.44.44-1.04-.13-.72-.67l3.86-6.49c.2-.34.68-.34.88 0l2.58 2.75c.2.21.52.21.72 0l3.5-3.52c.44-.44 1.04.13.72.67l-3.86 6.49c-.2.34-.68.34-.88 0z" />
+                      </svg>
+                      <span className="truncate">FB Messenger</span>
+                    </a>
+                  </Button>
+
+                  {/* 3. Call Directly Button */}
+                  <Button
+                    variant="outline"
+                    className="col-span-2 sm:col-span-1 gap-1.5 h-10 text-xs font-semibold hover:bg-primary/5 hover:text-primary transition-colors"
+                    asChild
+                  >
+                    <a
+                      href={telNumber ? `tel:${telNumber}` : "#"}
+                      onClick={(e) => {
+                        if (!telNumber) {
+                          e.preventDefault();
+                          toast.info("Agent phone number not yet connected.");
+                        }
+                      }}
+                    >
+                      <Phone className="h-4 w-4 text-primary shrink-0" />
+                      <span className="truncate">Call Directly</span>
+                    </a>
+                  </Button>
+                </div>
+              );
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Property Specs & Visual Media Editor Modal */}
+      <EditPropertyModal
+        property={editingProperty}
+        isOpen={Boolean(editingProperty)}
+        onClose={() => setEditingProperty(null)}
+        onSave={(propertyId, values) => {
+          updateProperty(propertyId, values);
+          toast.success("Updated property media & specifications!");
+          setEditingProperty(null);
+        }}
+      />
+      </div>
     </div>
   );
 }

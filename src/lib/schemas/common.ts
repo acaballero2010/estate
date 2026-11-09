@@ -10,9 +10,15 @@ export const AgentSchema = z.object({
   fullName: z.string().min(1),
   role: z.enum(["AGENT", "TEAM_LEADER", "BROKER", "ADMIN"]).default("AGENT"),
   prcLicenseNumber: z.string().optional().nullable(),
+  prcExpiryDate: z.string().optional().nullable(),
   dhsudRegistrationNo: z.string().optional().nullable(),
+  dhsudExpiryDate: z.string().optional().nullable(),
+  licensingBodyLogoUrl: z.string().optional().nullable(),
+  boardAffiliation: z.string().optional().nullable(),
+  awards: z.array(z.string()).default([]),
+  bioHeadline: z.string().optional().nullable(),
   phone: z.string().min(7),
-  avatarUrl: z.string().url().optional().nullable(),
+  avatarUrl: z.string().optional().nullable(),
   agencyName: z.string().default("PropFlow Realty Group"),
   isActive: z.boolean().default(true),
   createdAt: z.coerce.date(),
@@ -100,4 +106,46 @@ export const SavedReplySnippetSchema = z.object({
 });
 
 export type SavedReplySnippet = z.infer<typeof SavedReplySnippetSchema>;
+
+/**
+ * Site Tripping / Showroom Viewing Schedule Schema
+ */
+export const TrippingScheduleSchema = z.object({
+  id: z.string(),
+  leadId: z.string(),
+  propertyId: z.string(),
+  scheduledDate: z.string(), // YYYY-MM-DD
+  scheduledTime: z.string(), // HH:mm
+  meetingPoint: z.string(),
+  status: z
+    .enum(["CONFIRMED", "COMPLETED", "RESCHEDULED", "CANCELLED"])
+    .default("CONFIRMED"),
+  notes: z.string().default(""),
+  createdAt: z.string().optional(),
+});
+
+export type TrippingScheduleItem = z.infer<typeof TrippingScheduleSchema>;
+
+/**
+ * Agent Meta Messenger Channel Configuration Schema
+ */
+export const AgentMessengerSettingsSchema = z.object({
+  pageId: z.string().min(1, "Facebook Page ID is required"),
+  pageName: z.string().default(""),
+  pageAccessToken: z.string().min(1, "Page Access Token is required"),
+  appSecret: z.string().optional().default(""),
+  verifyToken: z.string().default("propflow_meta_verify_secret_2026"),
+  isConnected: z.boolean().default(false),
+  lastVerifiedAt: z.string().nullable().optional(),
+  autoReplyGreeting: z.boolean().default(true),
+  greetingMessage: z
+    .string()
+    .default(
+      "Hi {name}! Thanks for reaching out to us. Are you interested in pre-selling or ready-for-occupancy units?"
+    ),
+  updatedAt: z.string().optional(),
+});
+
+export type AgentMessengerSettings = z.infer<typeof AgentMessengerSettingsSchema>;
+
 

@@ -7,7 +7,7 @@ import {
   Copy,
   Download,
   Share2,
-  Sparkles,
+  Loader2,
   Check,
   Building2,
   RefreshCw,
@@ -455,7 +455,7 @@ Direct inquiries & site viewing bookings:
             {isGenerating && (
               <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-xs">
                 <span className="text-xs font-semibold flex items-center gap-1.5 text-primary">
-                  <Sparkles className="h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Rendering 1080×1080 High-Res Card...
                 </span>
               </div>

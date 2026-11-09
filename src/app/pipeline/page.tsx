@@ -9,6 +9,7 @@ import Papa from "papaparse";
 import {
   AlertCircle,
   Calculator,
+  CalendarCheck,
   Check,
   CheckCircle2,
   Clock,
@@ -16,6 +17,7 @@ import {
   Download,
   ExternalLink,
   Eye,
+  FileSignature,
   FileSpreadsheet,
   FileText,
   Filter,
@@ -34,7 +36,8 @@ import {
   Search,
   Send,
   ShieldCheck,
-  Sparkles,
+  Star,
+  Target,
   Trash2,
   TrendingUp,
   Upload,
@@ -60,6 +63,8 @@ import {
 } from "@/lib/lead-scoring";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
+import { BulkLeadImportModal } from "@/components/pipeline/bulk-lead-import-modal";
+import { ConvertLeadToDealModal } from "@/components/pipeline/convert-lead-to-deal-modal";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -145,9 +150,9 @@ export default function PipelinePage() {
     React.useState<PipelineStage | null>(null);
   const [isNewLeadOpen, setIsNewLeadOpen] = React.useState(false);
   const [isBulkOpen, setIsBulkOpen] = React.useState(false);
-  const [isParsingCsv, setIsParsingCsv] = React.useState(false);
+  const [isConvertDealOpen, setIsConvertDealOpen] = React.useState(false);
+  const [dealConversionLead, setDealConversionLead] = React.useState<Lead | null>(null);
   const [noteDraft, setNoteDraft] = React.useState("");
-  const csvFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Sync activeLead with store updates
   const selectedLead = React.useMemo(
@@ -339,9 +344,24 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
     if (!lead || lead.stage === targetStage) return;
 
     moveLeadStage(leadId, targetStage);
-    toast.success(
-      `Moved ${lead.firstName} ${lead.lastName} to ${PIPELINE_STAGE_LABELS[targetStage]}`
-    );
+    if (targetStage === "RESERVATION" || targetStage === "CLOSED_WON") {
+      toast.success(
+        `Moved ${lead.firstName} ${lead.lastName} to ${PIPELINE_STAGE_LABELS[targetStage]}!`,
+        {
+          action: {
+            label: "Open Deal Room",
+            onClick: () => {
+              setDealConversionLead(lead);
+              setIsConvertDealOpen(true);
+            },
+          },
+        }
+      );
+    } else {
+      toast.success(
+        `Moved ${lead.firstName} ${lead.lastName} to ${PIPELINE_STAGE_LABELS[targetStage]}`
+      );
+    }
   };
 
   const handleManualStageChange = (
@@ -350,9 +370,24 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
   ) => {
     if (lead.stage === targetStage) return;
     moveLeadStage(lead.id, targetStage);
-    toast.success(
-      `Updated ${lead.firstName} ${lead.lastName} → ${PIPELINE_STAGE_LABELS[targetStage]}`
-    );
+    if (targetStage === "RESERVATION" || targetStage === "CLOSED_WON") {
+      toast.success(
+        `Updated ${lead.firstName} ${lead.lastName} → ${PIPELINE_STAGE_LABELS[targetStage]}!`,
+        {
+          action: {
+            label: "Open Deal Room",
+            onClick: () => {
+              setDealConversionLead(lead);
+              setIsConvertDealOpen(true);
+            },
+          },
+        }
+      );
+    } else {
+      toast.success(
+        `Updated ${lead.firstName} ${lead.lastName} → ${PIPELINE_STAGE_LABELS[targetStage]}`
+      );
+    }
   };
 
   // New Lead Form with React Hook Form + Zod
@@ -391,52 +426,6 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
     toast.success("Activity note saved to lead timeline");
   };
 
-  // CSV Template Export
-  const handleDownloadLeadCsvTemplate = () => {
-    const templateRows = [
-      {
-        firstName: "Rafael",
-        lastName: "Zobel",
-        email: "rafael.zobel@ayala.com.ph",
-        phone: "+63 917 888 1234",
-        stage: "NEW_LEAD",
-        source: "PORTAL_INQUIRY",
-        priority: "HOT",
-        budgetMin: "15000000",
-        budgetMax: "25000000",
-        preferredLocations: "Bonifacio Global City, Taguig; Makati CBD",
-        preferredPropertyTypes: "CONDOMINIUM",
-        financingPreference: "BANK",
-        notes: "Looking for high-floor corner 2BR/3BR with 2 parking slots.",
-      },
-      {
-        firstName: "Ma. Teresa",
-        lastName: "Del Rosario",
-        email: "teresa.delrosario@gmail.com",
-        phone: "+63 920 555 7890",
-        stage: "CONTACTED",
-        source: "REFERRAL",
-        priority: "HIGH",
-        budgetMin: "9000000",
-        budgetMax: "14000000",
-        preferredLocations: "Nuvali, Santa Rosa, Laguna",
-        preferredPropertyTypes: "HOUSE_AND_LOT",
-        financingPreference: "BANK",
-        notes: "Family looking for 4BR single detached house, moving Q1 2027.",
-      },
-    ];
-
-    const csvContent = Papa.unparse(templateRows);
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "propflow-leads-template.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success("Downloaded CSV lead template");
-  };
-
   // Export Active Filtered Leads
   const handleExportFilteredLeads = () => {
     if (filteredLeads.length === 0) {
@@ -470,63 +459,6 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
     link.click();
     URL.revokeObjectURL(url);
     toast.success(`Exported ${filteredLeads.length} leads to CSV!`);
-  };
-
-  // Bulk CSV Upload Handler
-  const handleLeadCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsParsingCsv(true);
-    Papa.parse<Record<string, string>>(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        try {
-          const parsedInputs: CreateLeadInput[] = results.data
-            .filter((row) => row.firstName?.trim() || row.lastName?.trim())
-            .map((row) => ({
-              firstName: row.firstName?.trim() || "Prospective",
-              lastName: row.lastName?.trim() || "Buyer",
-              email: row.email?.trim() || "",
-              phone: row.phone?.trim() || "+63 900 000 0000",
-              stage: (row.stage?.trim() || "NEW_LEAD") as PipelineStage,
-              source: (row.source?.trim() || "MANUAL_ENTRY") as CreateLeadInput["source"],
-              priority: (row.priority?.trim() || "MEDIUM") as CreateLeadInput["priority"],
-              budgetMin: parseFloat(row.budgetMin || "3000000") || 3000000,
-              budgetMax: parseFloat(row.budgetMax || "10000000") || 10000000,
-              preferredLocations: row.preferredLocations
-                ? row.preferredLocations.split(";").map((s) => s.trim()).filter(Boolean)
-                : ["Metro Manila"],
-              preferredPropertyTypes: row.preferredPropertyTypes
-                ? (row.preferredPropertyTypes.split(";").map((s) => s.trim()) as CreateLeadInput["preferredPropertyTypes"])
-                : ["CONDOMINIUM"],
-              financingPreference: (row.financingPreference?.trim() || "BANK") as CreateLeadInput["financingPreference"],
-              notes: row.notes?.trim() || "Imported via CSV batch.",
-            }));
-
-          if (parsedInputs.length === 0) {
-            toast.error("No valid lead records found in CSV file.");
-            return;
-          }
-
-          bulkAddLeads(parsedInputs);
-          toast.success(`Successfully imported ${parsedInputs.length} leads into pipeline!`);
-          setIsBulkOpen(false);
-          if (csvFileInputRef.current) {
-            csvFileInputRef.current.value = "";
-          }
-        } catch {
-          toast.error("Failed to parse CSV format. Please verify columns match the template.");
-        } finally {
-          setIsParsingCsv(false);
-        }
-      },
-      error: () => {
-        toast.error("Could not read uploaded CSV file.");
-        setIsParsingCsv(false);
-      },
-    });
   };
 
   return (
@@ -609,79 +541,20 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
           </Button>
 
           {/* Bulk Import Leads Modal */}
-          <Dialog open={isBulkOpen} onOpenChange={setIsBulkOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
-                <span className="hidden sm:inline">Bulk</span> Import
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <FileSpreadsheet className="h-4 w-4 text-primary" />
-                  Bulk Import Leads (CSV)
-                </DialogTitle>
-                <DialogDescription className="text-xs">
-                  Import prospect lists from property expos, Facebook ads, or partner broker networks directly into your pipeline.
-                </DialogDescription>
-              </DialogHeader>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs gap-1.5"
+            onClick={() => setIsBulkOpen(true)}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5 text-primary" />
+            <span className="hidden sm:inline">Bulk</span> Import
+          </Button>
 
-              <div className="space-y-4 py-2">
-                <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold">1. Download Lead CSV Template</span>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="h-7 text-[11px] gap-1"
-                      onClick={handleDownloadLeadCsvTemplate}
-                    >
-                      <Download className="h-3 w-3" />
-                      Download .CSV
-                    </Button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Includes columns for First Name, Last Name, Email, Phone, Stage, Source, Priority, Min/Max Budget, and Preferences.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <span className="text-xs font-semibold">2. Upload Populated CSV File</span>
-                  <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed bg-muted/10 p-6 cursor-pointer hover:bg-muted/20 transition-colors">
-                    {isParsingCsv ? (
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    ) : (
-                      <Upload className="h-6 w-6 text-primary" />
-                    )}
-                    <span className="text-xs font-medium text-center">
-                      {isParsingCsv ? "Parsing Lead Records..." : "Click or drop your populated lead CSV file here"}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">Accepts UTF-8 .csv files</span>
-                    <input
-                      ref={csvFileInputRef}
-                      type="file"
-                      accept=".csv,text/csv"
-                      className="hidden"
-                      onChange={handleLeadCsvFileUpload}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsBulkOpen(false)}
-                >
-                  Close
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <BulkLeadImportModal
+            open={isBulkOpen}
+            onOpenChange={setIsBulkOpen}
+          />
 
           <Dialog open={isNewLeadOpen} onOpenChange={setIsNewLeadOpen}>
             <DialogTrigger asChild>
@@ -916,7 +789,7 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                                   {analysis.tier === "HOT" ? (
                                     <Flame className="h-2.5 w-2.5 fill-current text-rose-500" />
                                   ) : analysis.tier === "HIGH" ? (
-                                    <Sparkles className="h-2.5 w-2.5 text-amber-500" />
+                                    <Star className="h-2.5 w-2.5 fill-current text-amber-500" />
                                   ) : (
                                     <TrendingUp className="h-2.5 w-2.5" />
                                   )}
@@ -1149,7 +1022,7 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                             {analysis.tier === "HOT" ? (
                               <Flame className="h-3 w-3 fill-current text-rose-500" />
                             ) : analysis.tier === "HIGH" ? (
-                              <Sparkles className="h-3 w-3 text-amber-500" />
+                              <Star className="h-3 w-3 fill-current text-amber-500" />
                             ) : (
                               <TrendingUp className="h-3 w-3" />
                             )}
@@ -1286,7 +1159,7 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                   <div className="flex items-center justify-between border-b pb-2">
                     <div className="flex items-center gap-2">
                       <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <Sparkles className="h-4 w-4" />
+                        <Target className="h-4 w-4" />
                       </div>
                       <div>
                         <h4 className="text-xs font-bold leading-tight flex items-center gap-1.5">
@@ -1459,7 +1332,18 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                 <Button size="sm" className="w-full text-xs gap-1.5" asChild>
                   <Link href={`/quotations?leadId=${selectedLead.id}`}>
                     <Calculator className="h-3.5 w-3.5" />
-                    Generate Quotation
+                    Generate Quote
+                  </Link>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full text-xs gap-1.5"
+                  asChild
+                >
+                  <Link href={`/trippings?leadId=${selectedLead.id}`}>
+                    <CalendarCheck className="h-3.5 w-3.5 text-pipeline-tripping" />
+                    Book Tripping
                   </Link>
                 </Button>
                 <Button
@@ -1470,8 +1354,19 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                 >
                   <Link href={`/inbox?leadId=${selectedLead.id}`}>
                     <MessageSquare className="h-3.5 w-3.5" />
-                    Messenger Thread
+                    Messenger Chat
                   </Link>
+                </Button>
+                <Button
+                  size="sm"
+                  className="w-full text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm"
+                  onClick={() => {
+                    setDealConversionLead(selectedLead);
+                    setIsConvertDealOpen(true);
+                  }}
+                >
+                  <FileSignature className="h-3.5 w-3.5" />
+                  Convert to Deal
                 </Button>
               </div>
 
@@ -2043,6 +1938,13 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
           )}
         </SheetContent>
       </Sheet>
+
+      {/* 1-Click Convert Lead to Deal Room Modal */}
+      <ConvertLeadToDealModal
+        lead={dealConversionLead}
+        isOpen={isConvertDealOpen}
+        onClose={() => setIsConvertDealOpen(false)}
+      />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { firestoreDb } from "@/lib/firebase/config";
 
 /**
  * Verifies Meta Graph API X-Hub-Signature-256 HMAC-SHA256 payload signature
@@ -149,15 +151,51 @@ export async function POST(request: NextRequest) {
     }> = [];
 
     for (const entry of parsed.data.entry) {
+      let targetAgentUid: string | null = null;
+      try {
+        const routeDoc = await getDoc(doc(firestoreDb, "page_routes", entry.id));
+        if (routeDoc.exists()) {
+          targetAgentUid = (routeDoc.data() as { agentUid?: string })?.agentUid ?? null;
+        }
+      } catch (routingErr) {
+        console.warn("Could not query page_routes collection:", routingErr);
+      }
+
       for (const event of entry.messaging ?? []) {
         if (event.message || event.postback) {
+          const text = event.message?.text ?? event.postback?.payload;
           processedEvents.push({
             pageId: entry.id,
             senderPsid: event.sender.id,
             mid: event.message?.mid,
-            text: event.message?.text ?? event.postback?.payload,
+            text,
             timestamp: event.timestamp,
           });
+
+          // Route directly into the agent's Firestore collection if mapped
+          if (targetAgentUid && text) {
+            try {
+              const msgId = crypto.randomUUID();
+              const msgRef = doc(firestoreDb, "agents", targetAgentUid, "messages", msgId);
+              await setDoc(
+                msgRef,
+                {
+                  id: msgId,
+                  leadId: `lead_meta_${event.sender.id}`,
+                  senderType: "LEAD",
+                  senderId: event.sender.id,
+                  channel: "FACEBOOK_MESSENGER",
+                  metaMid: event.message?.mid || `mid_${Date.now()}`,
+                  content: text,
+                  deliveryStatus: "DELIVERED",
+                  createdAt: new Date(event.timestamp).toISOString(),
+                },
+                { merge: true }
+              );
+            } catch (persistErr) {
+              console.warn("Firestore inbound webhook persist error:", persistErr);
+            }
+          }
         }
       }
     }

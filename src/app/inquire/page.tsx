@@ -10,7 +10,6 @@ import {
   Building2,
   MapPin,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { CreateLeadInputSchema, type CreateLeadInput } from "@/lib/schemas";
 import { useCrmStore } from "@/lib/store/crm-store";
@@ -98,7 +97,7 @@ export default function PublicLeadCapturePage() {
         {/* Left Project Showcase (5 Cols) */}
         <div className="min-w-0 space-y-4 lg:col-span-5">
           <Badge variant="new" className="gap-1 text-xs">
-            <Sparkles className="h-3.5 w-3.5" /> Official Online Inquiry Portal
+            <ShieldCheck className="h-3.5 w-3.5" /> Official Online Inquiry Portal
           </Badge>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             Get Instant Sample Computation & Floor Plans

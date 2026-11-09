@@ -1,17 +1,21 @@
 import {
   collection,
+  deleteDoc,
   doc,
+  getDoc,
   getDocs,
   setDoc,
   writeBatch,
 } from "firebase/firestore";
 import { firestoreDb } from "./config";
 import type {
+  AgentMessengerSettings,
   Deal,
   Lead,
   Message,
   Property,
   Quotation,
+  TrippingScheduleItem,
 } from "@/lib/schemas";
 
 /**
@@ -117,6 +121,7 @@ export interface AgentWorkspaceData {
   messages: Message[];
   quotations: Quotation[];
   deals: Deal[];
+  trippings?: TrippingScheduleItem[];
 }
 
 /**
@@ -133,15 +138,17 @@ export async function loadOrSeedAgentFirestoreWorkspace(
   const msgsCol = collection(firestoreDb, "agents", agentUid, "messages");
   const quotesCol = collection(firestoreDb, "agents", agentUid, "quotations");
   const dealsCol = collection(firestoreDb, "agents", agentUid, "deals");
+  const trippingsCol = collection(firestoreDb, "agents", agentUid, "trippings");
 
   // Query all collections concurrently
-  const [leadsSnap, propsSnap, msgsSnap, quotesSnap, dealsSnap] =
+  const [leadsSnap, propsSnap, msgsSnap, quotesSnap, dealsSnap, trippingsSnap] =
     await Promise.all([
       getDocs(leadsCol),
       getDocs(propsCol),
       getDocs(msgsCol),
       getDocs(quotesCol),
       getDocs(dealsCol),
+      getDocs(trippingsCol),
     ]);
 
   const isDemoAgent =
@@ -172,6 +179,11 @@ export async function loadOrSeedAgentFirestoreWorkspace(
     for (const quote of defaults.quotations) {
       batch.set(doc(quotesCol, quote.id), toFirestorePayload(quote));
     }
+    if (defaults.trippings) {
+      for (const trip of defaults.trippings) {
+        batch.set(doc(trippingsCol, trip.id), toFirestorePayload(trip));
+      }
+    }
 
     await batch.commit();
 
@@ -181,6 +193,7 @@ export async function loadOrSeedAgentFirestoreWorkspace(
       messages: defaults.messages,
       deals: defaults.deals,
       quotations: defaults.quotations,
+      trippings: defaults.trippings,
     };
   }
 
@@ -200,6 +213,9 @@ export async function loadOrSeedAgentFirestoreWorkspace(
   const deals = dealsSnap.docs.map((d) =>
     hydrateDealDates(d.data() as Record<string, unknown>)
   );
+  const trippings = trippingsSnap.docs.map(
+    (d) => d.data() as TrippingScheduleItem
+  );
 
   return {
     leads: leads.length > 0 ? leads : isDemoAgent ? defaults.leads : [],
@@ -207,6 +223,12 @@ export async function loadOrSeedAgentFirestoreWorkspace(
     messages: messages.length > 0 ? messages : isDemoAgent ? defaults.messages : [],
     quotations: quotations.length > 0 ? quotations : isDemoAgent ? defaults.quotations : [],
     deals: deals.length > 0 ? deals : isDemoAgent ? defaults.deals : [],
+    trippings:
+      trippings.length > 0
+        ? trippings
+        : isDemoAgent
+        ? defaults.trippings || []
+        : [],
   };
 }
 
@@ -215,7 +237,13 @@ export async function loadOrSeedAgentFirestoreWorkspace(
  */
 export async function persistAgentDocument<T extends { id: string }>(
   agentUid: string | null,
-  collectionName: "leads" | "properties" | "messages" | "quotations" | "deals",
+  collectionName:
+    | "leads"
+    | "properties"
+    | "messages"
+    | "quotations"
+    | "deals"
+    | "trippings",
   item: T
 ): Promise<void> {
   if (!agentUid) return;
@@ -226,4 +254,109 @@ export async function persistAgentDocument<T extends { id: string }>(
     console.warn(`Firestore sync warning (${collectionName}):`, err);
   }
 }
+
+/**
+ * Deletes a single document inside `/agents/{agentUid}/{collectionName}/{docId}`
+ */
+export async function deleteAgentDocument(
+  agentUid: string | null,
+  collectionName:
+    | "leads"
+    | "properties"
+    | "messages"
+    | "quotations"
+    | "deals"
+    | "trippings",
+  docId: string
+): Promise<void> {
+  if (!agentUid) return;
+  try {
+    const ref = doc(firestoreDb, "agents", agentUid, collectionName, docId);
+    await deleteDoc(ref);
+  } catch (err) {
+    console.warn(`Firestore delete warning (${collectionName}):`, err);
+  }
+}
+
+/**
+ * Loads an agent's Meta Messenger Channel Settings from Firestore,
+ * with localStorage fallback for local/demo accounts.
+ */
+export async function loadAgentMessengerSettings(
+  agentUid: string | null
+): Promise<AgentMessengerSettings | null> {
+  if (!agentUid) return null;
+
+  // Try localStorage first for fast hydration / demo fallback
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem(`propflow_messenger_settings_${agentUid}`);
+      if (stored) {
+        return JSON.parse(stored) as AgentMessengerSettings;
+      }
+    } catch {
+      // ignore localStorage errors
+    }
+  }
+
+  try {
+    const settingsDoc = doc(firestoreDb, "agents", agentUid, "settings", "messenger");
+    const snap = await getDoc(settingsDoc);
+    if (snap.exists()) {
+      const data = snap.data() as AgentMessengerSettings;
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem(`propflow_messenger_settings_${agentUid}`, JSON.stringify(data));
+        } catch {}
+      }
+      return data;
+    }
+  } catch (err) {
+    console.warn("Could not load messenger settings from Firestore:", err);
+  }
+
+  return null;
+}
+
+/**
+ * Persists an agent's Meta Messenger Channel Settings to Firestore
+ * and registers the page route in `page_routes/{pageId}` for inbound routing.
+ */
+export async function saveAgentMessengerSettings(
+  agentUid: string,
+  settings: AgentMessengerSettings
+): Promise<void> {
+  if (!agentUid) return;
+
+  // Save to local storage for instant availability
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(`propflow_messenger_settings_${agentUid}`, JSON.stringify(settings));
+    } catch {}
+  }
+
+  try {
+    // 1. Save to agent's private settings
+    const settingsDoc = doc(firestoreDb, "agents", agentUid, "settings", "messenger");
+    await setDoc(settingsDoc, toFirestorePayload(settings), { merge: true });
+
+    // 2. If pageId is set, register route in page_routes index for webhook separation
+    if (settings.pageId && settings.isConnected) {
+      const routeDoc = doc(firestoreDb, "page_routes", settings.pageId);
+      await setDoc(
+        routeDoc,
+        toFirestorePayload({
+          pageId: settings.pageId,
+          pageName: settings.pageName || "Agent Page",
+          agentUid,
+          updatedAt: new Date().toISOString(),
+        }),
+        { merge: true }
+      );
+    }
+  } catch (err) {
+    console.warn("Firestore saveAgentMessengerSettings warning:", err);
+  }
+}
+
 

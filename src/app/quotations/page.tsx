@@ -1,6 +1,8 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import * as React from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,6 +19,7 @@ import {
   History,
   Loader2,
   Mail,
+  MessageCircle,
   Percent,
   Send,
   X,
@@ -35,6 +38,8 @@ import {
   generateQuotationPdfBlob,
 } from "@/components/quotations/quotation-pdf-document";
 import { QuotationHistoryTracker } from "@/components/quotations/quotation-history-tracker";
+import { WhatsAppViberShareModal } from "@/components/quotations/whatsapp-viber-share-modal";
+import { SiteHeader } from "@/components/layout/site-header";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { useCrmStore } from "@/lib/store/crm-store";
 import {
@@ -77,7 +82,7 @@ function QuotationCalculatorContent() {
   const initialTab = searchParams.get("tab");
 
   const { leads, properties, quotations, saveQuotation, sendMessage } = useCrmStore();
-  const { agentProfile } = useAuth();
+  const { user, agentProfile } = useAuth();
 
   const [activeMainTab, setActiveMainTab] = React.useState<"CALCULATOR" | "TRACKER">(
     initialTab === "tracker" ? "TRACKER" : "CALCULATOR"
@@ -94,9 +99,12 @@ function QuotationCalculatorContent() {
     startProp?.id || ""
   );
   const [copiedLink, setCopiedLink] = React.useState(false);
+  const [shareModalOpen, setShareModalOpen] = React.useState(false);
   const [selectedCurrency, setSelectedCurrency] = React.useState<SupportedCurrency>("PHP");
 
   const selectedLead = leads.find((l) => l.id === selectedLeadId);
+  const selectedProp =
+    properties.find((p) => p.id === selectedPropertyId) ?? startProp;
 
   const form = useForm<QuotationCalculationInput>({
     resolver: zodResolver(QuotationCalculationInputSchema),
@@ -507,7 +515,17 @@ function QuotationCalculatorContent() {
   }, [watchedValues]);
 
   return (
-    <div className="container space-y-5 py-5">
+    <div className="min-h-screen bg-background text-foreground">
+      {!user && <SiteHeader />}
+      {!user && (
+        <div className="border-b border-primary/20 bg-primary/5 px-4 py-2 text-xs text-center flex flex-wrap items-center justify-center gap-2 text-primary font-medium print:hidden">
+          <span>💡 Guest Amortization Studio: Simulate buyer equity computations, Step-Up schedules, and download official PDF proposals.</span>
+          <Link href="/login" className="underline font-semibold hover:text-primary/80">
+            Agent Sign In to save proposals to CRM leads →
+          </Link>
+        </div>
+      )}
+      <div className="container px-3.5 sm:px-6 space-y-4 sm:space-y-5 py-3.5 sm:py-5 pb-24 md:pb-10">
       {/* Top Header & View Mode Switcher */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-4 print:hidden">
         <div>
@@ -520,26 +538,26 @@ function QuotationCalculatorContent() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="grid grid-cols-2 sm:inline-flex w-full sm:w-auto rounded-lg border bg-muted/40 p-1">
             <Button
               variant={activeMainTab === "CALCULATOR" ? "default" : "ghost"}
               size="sm"
-              className="h-8 text-xs gap-1.5 font-medium"
+              className="h-8 text-xs gap-1.5 font-medium px-2 justify-center"
               onClick={() => setActiveMainTab("CALCULATOR")}
             >
-              <Calculator className="h-3.5 w-3.5" />
-              <span>Pricing Calculator</span>
+              <Calculator className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Calculator</span>
             </Button>
             <Button
               variant={activeMainTab === "TRACKER" ? "default" : "ghost"}
               size="sm"
-              className="h-8 text-xs gap-1.5 font-medium"
+              className="h-8 text-xs gap-1 font-medium px-2 justify-center"
               onClick={() => setActiveMainTab("TRACKER")}
             >
-              <History className="h-3.5 w-3.5" />
-              <span>Sent Proposals &amp; Revisions</span>
-              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+              <History className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Proposals</span>
+              <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px] shrink-0">
                 {quotations.length}
               </Badge>
             </Button>
@@ -553,7 +571,7 @@ function QuotationCalculatorContent() {
           onOpenCalculator={() => setActiveMainTab("CALCULATOR")}
         />
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5">
           {/* Active Revision Banner */}
           {revisingQuotation && (
             <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
@@ -592,114 +610,123 @@ function QuotationCalculatorContent() {
           )}
 
           {/* Calculator Action Bar */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between print:hidden">
             <span className="text-xs text-muted-foreground">
               {revisingQuotation
                 ? `Editing revision terms for ${selectedLead ? `${selectedLead.firstName} ${selectedLead.lastName}` : "Client"}`
                 : "Configure pricing, discounts, and payment terms"}
             </span>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-2 w-full sm:w-auto">
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-8 text-xs gap-1.5 w-full sm:w-auto justify-center"
                 onClick={handleCopyShareLink}
               >
                 {copiedLink ? (
-                  <Check className="h-3.5 w-3.5 text-pipeline-won" />
+                  <Check className="h-3.5 w-3.5 text-pipeline-won shrink-0" />
                 ) : (
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy className="h-3.5 w-3.5 shrink-0" />
                 )}
-                Share Link
+                <span className="truncate">Share Link</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-8 text-xs gap-1.5 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10 dark:text-emerald-400 w-full sm:w-auto justify-center"
+                onClick={() => setShareModalOpen(true)}
+              >
+                <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">WhatsApp</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5 w-full sm:w-auto justify-center"
                 disabled={isGeneratingPdf}
                 onClick={handlePrintPdf}
               >
-                <Download className="h-3.5 w-3.5" />
-                {isGeneratingPdf ? "Generating PDF..." : "Download PDF"}
+                <Download className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{isGeneratingPdf ? "Generating..." : "Download PDF"}</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-8 text-xs gap-1.5 w-full sm:w-auto justify-center"
                 disabled={isSendingEmail}
                 onClick={handleSendEmailQuotation}
               >
                 {isSendingEmail ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
                 ) : (
-                  <Mail className="h-3.5 w-3.5 text-primary" />
+                  <Mail className="h-3.5 w-3.5 text-primary shrink-0" />
                 )}
-                {isSendingEmail ? "Sending..." : "Email Quote"}
+                <span className="truncate">{isSendingEmail ? "Sending..." : "Email Quote"}</span>
               </Button>
               <Button
                 variant="secondary"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-8 text-xs gap-1.5 w-full sm:w-auto justify-center"
                 onClick={handleSaveDraftOnly}
               >
-                <Check className="h-3.5 w-3.5" />
-                Save Draft
+                <Check className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Save Draft</span>
               </Button>
               <Button
                 size="sm"
-                className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                className="h-8 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold w-full sm:w-auto justify-center"
                 onClick={handleSaveAndSendToChat}
               >
                 {revisingQuotation ? (
                   <>
-                    <GitFork className="h-3.5 w-3.5" />
-                    Save &amp; Dispatch Revision
+                    <GitFork className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Dispatch Revision</span>
                   </>
                 ) : (
                   <>
-                    <Send className="h-3.5 w-3.5" />
-                    Send to Messenger
+                    <Send className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">Send to Messenger</span>
                   </>
                 )}
               </Button>
             </div>
           </div>
 
-      {/* OFW & Overseas Investor Multi-Currency Selector */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/20 px-4 py-2.5 print:hidden">
-        <div className="flex items-center gap-2">
-          <Globe2 className="h-4 w-4 text-primary" />
-          <span className="text-xs font-semibold">Overseas & OFW Currency Switcher:</span>
-          <span className="text-[11px] text-muted-foreground hidden sm:inline">
-            Toggle rates to see quotation in foreign buyer earning currency
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          {(Object.keys(CURRENCY_CONFIGS) as SupportedCurrency[]).map((curr) => {
-            const conf = CURRENCY_CONFIGS[curr];
-            const isSelected = selectedCurrency === curr;
-            return (
-              <Button
-                key={curr}
-                type="button"
-                size="sm"
-                variant={isSelected ? "default" : "outline"}
-                className="h-7 px-2.5 text-xs gap-1"
-                onClick={() => setSelectedCurrency(curr)}
-              >
-                <span>{conf.flag}</span>
-                <span className="font-semibold">{conf.code}</span>
-                {curr !== "PHP" && (
-                  <span className="text-[10px] opacity-75 hidden md:inline">
-                    (≈ ₱{conf.phpRate})
-                  </span>
-                )}
-              </Button>
-            );
-          })}
-        </div>
-      </div>
+          {/* OFW & Overseas Investor Multi-Currency Selector */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border bg-muted/20 p-3 sm:px-4 sm:py-2.5 print:hidden">
+            <div className="flex items-center gap-2">
+              <Globe2 className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-xs font-semibold">Overseas &amp; OFW Currency:</span>
+              <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                Toggle rates to view in buyer's earning currency
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0 no-scrollbar -mx-1 px-1 w-full sm:w-auto">
+              {(Object.keys(CURRENCY_CONFIGS) as SupportedCurrency[]).map((curr) => {
+                const conf = CURRENCY_CONFIGS[curr];
+                const isSelected = selectedCurrency === curr;
+                return (
+                  <Button
+                    key={curr}
+                    type="button"
+                    size="sm"
+                    variant={isSelected ? "default" : "outline"}
+                    className="h-7 px-2.5 text-xs gap-1 shrink-0"
+                    onClick={() => setSelectedCurrency(curr)}
+                  >
+                    <span>{conf.flag}</span>
+                    <span className="font-semibold">{conf.code}</span>
+                    {curr !== "PHP" && (
+                      <span className="text-[10px] opacity-75 hidden md:inline">
+                        (≈ ₱{conf.phpRate})
+                      </span>
+                    )}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
 
       <div className="grid gap-5 lg:grid-cols-12">
         {/* LEFT COLUMN: Interactive Calculator Parameters (5 Cols) */}
@@ -743,7 +770,7 @@ function QuotationCalculatorContent() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="space-y-1">
                   <Label>Project Name</Label>
                   <Input
@@ -771,7 +798,7 @@ function QuotationCalculatorContent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 pt-0 space-y-3">
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="space-y-1">
                   <Label>Gross List Price (₱)</Label>
                   <Input
@@ -793,7 +820,7 @@ function QuotationCalculatorContent() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="space-y-1">
                   <Label>Misc. & Transfer Fees (%)</Label>
                   <Input
@@ -818,7 +845,7 @@ function QuotationCalculatorContent() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="space-y-1">
                   <Label>Down Payment (%)</Label>
                   <div className="flex gap-1">
@@ -958,7 +985,7 @@ function QuotationCalculatorContent() {
                 ))}
               </div>
 
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div className="space-y-1">
                   <Label>Interest Rate (% p.a.)</Label>
                   <Input
@@ -1017,17 +1044,27 @@ function QuotationCalculatorContent() {
                       : ""}
                   </CardDescription>
                 </div>
-                <div className="text-left sm:text-right text-xs">
-                  <p className="font-semibold">
-                    Prepared For:{" "}
-                    {selectedLead
-                      ? `${selectedLead.firstName} ${selectedLead.lastName}`
-                      : "Valued Client"}
-                  </p>
-                  <p className="text-muted-foreground">
-                    Prepared By: {agentProfile?.fullName} (
-                    {agentProfile?.prcLicenseNumber})
-                  </p>
+                <div className="flex items-center gap-2.5 text-left sm:text-right">
+                  <div className="text-left sm:text-right text-xs">
+                    <p className="font-semibold">
+                      Prepared For:{" "}
+                      {selectedLead
+                        ? `${selectedLead.firstName} ${selectedLead.lastName}`
+                        : "Valued Client"}
+                    </p>
+                    <p className="text-muted-foreground">
+                      Prepared By: {agentProfile?.fullName} ({agentProfile?.prcLicenseNumber})
+                    </p>
+                  </div>
+                  {agentProfile?.avatarUrl && (
+                    <div className="h-8 w-8 rounded-full overflow-hidden border border-primary/20 bg-muted shrink-0 shadow-xs hidden sm:block">
+                      <img
+                        src={agentProfile.avatarUrl}
+                        alt={agentProfile.fullName}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </CardHeader>
@@ -1371,6 +1408,40 @@ function QuotationCalculatorContent() {
       </div>
     </div>
   )}
+
+  {/* WhatsApp / Viber Quick Share Modal */}
+  <WhatsAppViberShareModal
+    open={shareModalOpen}
+    onOpenChange={setShareModalOpen}
+    quotationData={{
+      projectName: watchedValues.projectName,
+      unitCode: watchedValues.unitCode,
+      floorAreaSqm: watchedValues.floorAreaSqm,
+      locationCity: selectedProp?.locationCity,
+      totalContractPrice: result.totalContractPrice,
+      reservationFee: watchedValues.reservationFee,
+      monthlyDownPayment: result.monthlyDownPayment,
+      downPaymentMonths: watchedValues.downPaymentTermMonths,
+      monthlyAmortization: result.monthlyAmortization,
+      loanTenorYears: watchedValues.loanTenorYears,
+      annualInterestRate: watchedValues.annualInterestRate,
+      buyerName: selectedLead
+        ? `${selectedLead.firstName} ${selectedLead.lastName}`
+        : undefined,
+      buyerPhone: selectedLead?.phone,
+      agentName: agentProfile?.fullName || "Marco Reyes, REB",
+      agentLicense: agentProfile?.prcLicenseNumber || "PRC #0031842",
+      shareUrl: `${
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "https://propflow.ph"
+      }/quote/${selectedLead?.id.slice(0, 8) || "preview26"}?leadId=${
+        selectedLead?.id || ""
+      }&unit=${encodeURIComponent(watchedValues.unitCode)}`,
+    }}
+    initialCurrency={selectedCurrency}
+  />
+</div>
 </div>
 );
 }

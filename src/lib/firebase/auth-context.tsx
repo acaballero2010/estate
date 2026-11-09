@@ -7,7 +7,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
-  updateProfile,
+  updateProfile as updateFirebaseProfile,
   type User,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -23,10 +23,23 @@ export interface AgentProfile {
   email: string;
   fullName: string;
   role: "AGENT" | "TEAM_LEADER" | "BROKER" | "ADMIN";
+  avatarUrl?: string;
+  isPlatformAdmin?: boolean;
+  subscriptionTier?: "STARTER" | "PRO" | "ENTERPRISE";
+  subscriptionStatus?: "ACTIVE" | "TRIAL" | "PAST_DUE" | "CANCELLED";
+  subscriptionRenewsAt?: string;
   prcLicenseNumber: string;
+  prcExpiryDate?: string;
   dhsudRegistrationNo?: string;
+  dhsudExpiryDate?: string;
+  licensingBodyLogoUrl?: string;
+  boardAffiliation?: string;
+  awards?: string[];
+  bioHeadline?: string;
   phone: string;
   agencyName: string;
+  facebookUrl?: string;
+  messengerUrl?: string;
   createdAt?: string;
 }
 
@@ -48,6 +61,11 @@ interface AuthContextValue {
   registerAgent: (payload: RegisterAgentPayload) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  updateProfile: (updates: Partial<AgentProfile>) => Promise<void>;
+  updateSubscription: (
+    tier: "STARTER" | "PRO" | "ENTERPRISE",
+    cycle?: "MONTHLY" | "ANNUAL"
+  ) => Promise<void>;
 }
 
 const AuthContext = React.createContext<AuthContextValue | undefined>(
@@ -58,8 +76,25 @@ const DEFAULT_FALLBACK_AGENT: AgentProfile = {
   uid: "demo-agent-marco",
   email: "marco.reyes@propflow.ph",
   fullName: "Marco Reyes, REB",
-  role: "BROKER",
+  role: "ADMIN",
+  avatarUrl: "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80",
+  isPlatformAdmin: true,
+  subscriptionTier: "PRO",
+  subscriptionStatus: "ACTIVE",
+  subscriptionRenewsAt: "2027-01-01",
   prcLicenseNumber: "PRC #0031842",
+  prcExpiryDate: "2027-11-30",
+  dhsudRegistrationNo: "DHSUD-NCR-B-08/24-1190",
+  dhsudExpiryDate: "2026-12-31",
+  boardAffiliation: "PAREB - Pasig Realtors Board (PRB)",
+  licensingBodyLogoUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Professional_Regulation_Commission_%28PRC%29.svg/240px-Professional_Regulation_Commission_%28PRC%29.svg.png",
+  bioHeadline: "Licensed Real Estate Broker & Certified Investment Advisor specializing in high-yield Metro Manila masterplanned estates.",
+  awards: [
+    "🏆 Ayala Premier Top Producer 2025",
+    "⭐ ₱500M+ Closed Sales Volume Club",
+    "🎖️ PAREB Leadership Excellence Award",
+    "🛡️ 100% Verified PRC & DHSUD Credentialed",
+  ],
   phone: "+63 917 880 1122",
   agencyName: "PropFlow Realty Group",
 };
@@ -119,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: firebaseUser.email || "",
           fullName: firebaseUser.displayName || "Real Estate Agent",
           role: "AGENT",
-          prcLicenseNumber: "PRC #0031842",
+          prcLicenseNumber: "PRC Pending Verification",
           phone: "+63 917 000 0000",
           agencyName: "PropFlow Realty Group",
         };
@@ -129,6 +164,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   React.useEffect(() => {
+    try {
+      const cached = localStorage.getItem("propflow_agent_profile");
+      if (cached) {
+        setAgentProfile(JSON.parse(cached));
+      }
+    } catch {
+      // Non-blocking
+    }
+
     const unsubscribe = onAuthStateChanged(
       firebaseAuth,
       async (currentUser) => {
@@ -137,9 +181,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (currentUser) {
           const profile = await fetchOrCreateAgentProfile(currentUser);
           setAgentProfile(profile);
+          try {
+            localStorage.setItem(
+              "propflow_agent_profile",
+              JSON.stringify(profile)
+            );
+          } catch {
+            // Non-blocking localStorage error
+          }
           await useCrmStore.getState().syncWithAgentAccount(currentUser.uid);
         } else {
           setAgentProfile(null);
+          try {
+            localStorage.removeItem("propflow_agent_profile");
+          } catch {
+            // Non-blocking localStorage error
+          }
           await useCrmStore.getState().syncWithAgentAccount(null);
         }
         setLoading(false);
@@ -158,6 +215,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionCookie(true);
     const profile = await fetchOrCreateAgentProfile(credential.user);
     setAgentProfile(profile);
+    try {
+      localStorage.setItem("propflow_agent_profile", JSON.stringify(profile));
+    } catch {
+      // Non-blocking
+    }
   };
 
   const registerAgent = async (payload: RegisterAgentPayload) => {
@@ -168,7 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
     setSessionCookie(true);
 
-    await updateProfile(credential.user, {
+    await updateFirebaseProfile(credential.user, {
       displayName: payload.fullName,
     });
 
@@ -192,6 +254,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     setAgentProfile(newProfile);
+    try {
+      localStorage.setItem(
+        "propflow_agent_profile",
+        JSON.stringify(newProfile)
+      );
+    } catch {
+      // Non-blocking
+    }
   };
 
   const signInWithGoogle = async () => {
@@ -199,6 +269,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionCookie(true);
     const profile = await fetchOrCreateAgentProfile(credential.user);
     setAgentProfile(profile);
+    try {
+      localStorage.setItem("propflow_agent_profile", JSON.stringify(profile));
+    } catch {
+      // Non-blocking
+    }
   };
 
   const signOut = async () => {
@@ -206,18 +281,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await firebaseSignOut(firebaseAuth);
     setUser(null);
     setAgentProfile(null);
+    try {
+      localStorage.removeItem("propflow_agent_profile");
+    } catch {
+      // Non-blocking
+    }
+  };
+
+  const updateProfile = async (updates: Partial<AgentProfile>) => {
+    const current = agentProfile || DEFAULT_FALLBACK_AGENT;
+    const updated: AgentProfile = {
+      ...current,
+      ...updates,
+    };
+    setAgentProfile(updated);
+    try {
+      localStorage.setItem("propflow_agent_profile", JSON.stringify(updated));
+    } catch {
+      // Non-blocking
+    }
+
+    const targetUid = user?.uid || current.uid;
+    if (targetUid) {
+      try {
+        await setDoc(doc(firestoreDb, "agents", targetUid), updated, {
+          merge: true,
+        });
+      } catch (err) {
+        console.warn("Could not persist agent profile update to Firestore:", err);
+      }
+    }
+  };
+
+  const updateSubscription = async (
+    tier: "STARTER" | "PRO" | "ENTERPRISE",
+    cycle: "MONTHLY" | "ANNUAL" = "MONTHLY"
+  ) => {
+    const renewsDate = new Date();
+    if (cycle === "ANNUAL") {
+      renewsDate.setFullYear(renewsDate.getFullYear() + 1);
+    } else {
+      renewsDate.setMonth(renewsDate.getMonth() + 1);
+    }
+
+    await updateProfile({
+      subscriptionTier: tier,
+      subscriptionStatus: "ACTIVE",
+      subscriptionRenewsAt: renewsDate.toISOString().slice(0, 10),
+    });
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        agentProfile: agentProfile ?? (user ? DEFAULT_FALLBACK_AGENT : null),
+        agentProfile,
         loading,
         signInWithEmail,
         registerAgent,
         signInWithGoogle,
         signOut,
+        updateProfile,
+        updateSubscription,
       }}
     >
       {children}

@@ -10,10 +10,15 @@ import type {
   SavedReplySnippet,
   Deal,
   CreateLeadInput,
+  AgentMessengerSettings,
+  TrippingScheduleItem,
 } from "@/lib/schemas";
 import {
   loadOrSeedAgentFirestoreWorkspace,
   persistAgentDocument,
+  deleteAgentDocument,
+  loadAgentMessengerSettings,
+  saveAgentMessengerSettings,
 } from "@/lib/firebase/firestore-sync";
 
 const AGENT_ID = "00000000-0000-4000-8000-000000000001";
@@ -795,6 +800,31 @@ export const INITIAL_QUOTATIONS: Quotation[] = [
   },
 ];
 
+export const INITIAL_TRIPPINGS: TrippingScheduleItem[] = [
+  {
+    id: "trip-001",
+    leadId: "20000000-0000-4000-8000-000000000002",
+    propertyId: "10000000-0000-4000-8000-000000000001",
+    scheduledDate: "2026-11-14",
+    scheduledTime: "14:00",
+    meetingPoint: "The Meridian Park Main Pavilion, 34th St., BGC",
+    status: "CONFIRMED",
+    notes: "VIP Guest Parking Slot #12 reserved. Prepare 2BR Corner scale model.",
+    createdAt: new Date("2026-11-08T06:40:00Z").toISOString(),
+  },
+  {
+    id: "trip-002",
+    leadId: "20000000-0000-4000-8000-000000000001",
+    propertyId: "10000000-0000-4000-8000-000000000002",
+    scheduledDate: "2026-11-15",
+    scheduledTime: "10:30",
+    meetingPoint: "Solana Verde Clubhouse Gate, Nuvali South",
+    status: "CONFIRMED",
+    notes: "Inspecting Aria RFO Model House (Block 14 Lot 8) with family.",
+    createdAt: new Date("2026-11-08T07:00:00Z").toISOString(),
+  },
+];
+
 interface CrmState {
   activeAgentUid: string | null;
   isSyncingFirestore: boolean;
@@ -803,10 +833,13 @@ interface CrmState {
   messages: Message[];
   deals: Deal[];
   quotations: Quotation[];
+  trippings: TrippingScheduleItem[];
   selectedLeadId: string | null;
+  messengerSettings: AgentMessengerSettings | null;
 
   // Actions
   syncWithAgentAccount: (agentUid: string | null) => Promise<void>;
+  updateMessengerSettings: (settings: Partial<AgentMessengerSettings>) => Promise<void>;
   setSelectedLeadId: (id: string | null) => void;
   moveLeadStage: (leadId: string, targetStage: PipelineStage) => void;
   addLead: (input: CreateLeadInput) => Lead;
@@ -816,8 +849,16 @@ interface CrmState {
   updateProperty: (propertyId: string, input: Partial<CreatePropertyInput>) => Property | null;
   updatePropertyStatus: (propertyId: string, status: Property["status"]) => void;
   deleteProperty: (propertyId: string) => void;
+  addTripping: (trip: Omit<TrippingScheduleItem, "id" | "createdAt">) => TrippingScheduleItem;
+  updateTrippingStatus: (id: string, status: TrippingScheduleItem["status"]) => void;
+  deleteTripping: (id: string) => void;
   addLeadNote: (leadId: string, noteText: string) => void;
   sendMessage: (
+    leadId: string,
+    content: string,
+    attachedQuotationId?: string
+  ) => Message;
+  sendClientPortalMessage: (
     leadId: string,
     content: string,
     attachedQuotationId?: string
@@ -939,6 +980,44 @@ function saveLocalQuotation(quotation: Quotation, agentUid?: string | null) {
   }
 }
 
+function getLocalTrippings(agentUid?: string | null): TrippingScheduleItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const key = `propflow_trippings_${agentUid || "default"}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed;
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalTripping(trip: TrippingScheduleItem, agentUid?: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    const key = `propflow_trippings_${agentUid || "default"}`;
+    const existing = getLocalTrippings(agentUid);
+    const updated = [trip, ...existing.filter((t) => t.id !== trip.id)];
+    localStorage.setItem(key, JSON.stringify(updated));
+  } catch (e) {
+    console.warn("localStorage tripping save failed:", e);
+  }
+}
+
+function deleteLocalTripping(tripId: string, agentUid?: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    const key = `propflow_trippings_${agentUid || "default"}`;
+    const existing = getLocalTrippings(agentUid);
+    const updated = existing.filter((t) => t.id !== tripId);
+    localStorage.setItem(key, JSON.stringify(updated));
+  } catch (e) {
+    console.warn("localStorage tripping delete failed:", e);
+  }
+}
+
 export const useCrmStore = create<CrmState>((set, get) => ({
   activeAgentUid: null,
   isSyncingFirestore: false,
@@ -947,7 +1026,9 @@ export const useCrmStore = create<CrmState>((set, get) => ({
   messages: INITIAL_MESSAGES,
   deals: INITIAL_DEALS,
   quotations: INITIAL_QUOTATIONS,
+  trippings: INITIAL_TRIPPINGS,
   selectedLeadId: INITIAL_LEADS[0]?.id ?? null,
+  messengerSettings: null,
 
   syncWithAgentAccount: async (agentUid) => {
     if (!agentUid) {
@@ -961,6 +1042,13 @@ export const useCrmStore = create<CrmState>((set, get) => ({
       INITIAL_QUOTATIONS.forEach((q) => quoteMap.set(q.id, q));
       localQuotes.forEach((q) => quoteMap.set(q.id, q));
 
+      const localTrips = getLocalTrippings("default");
+      const tripMap = new Map<string, TrippingScheduleItem>();
+      INITIAL_TRIPPINGS.forEach((t) => tripMap.set(t.id, t));
+      localTrips.forEach((t) => tripMap.set(t.id, t));
+
+      const demoSettings = await loadAgentMessengerSettings("demo-agent-marco");
+
       set({
         activeAgentUid: null,
         leads: INITIAL_LEADS,
@@ -968,7 +1056,9 @@ export const useCrmStore = create<CrmState>((set, get) => ({
         messages: INITIAL_MESSAGES,
         deals: INITIAL_DEALS,
         quotations: Array.from(quoteMap.values()),
+        trippings: Array.from(tripMap.values()),
         selectedLeadId: INITIAL_LEADS[0]?.id ?? null,
+        messengerSettings: demoSettings,
         isSyncingFirestore: false,
       });
       return;
@@ -981,7 +1071,10 @@ export const useCrmStore = create<CrmState>((set, get) => ({
         messages: INITIAL_MESSAGES,
         deals: INITIAL_DEALS,
         quotations: INITIAL_QUOTATIONS,
+        trippings: INITIAL_TRIPPINGS,
       });
+
+      const agentMessengerSettings = await loadAgentMessengerSettings(agentUid);
 
       // Merge: Master developer catalog + local custom properties + Firestore properties + in-memory store properties
       const localProps = [
@@ -1005,18 +1098,58 @@ export const useCrmStore = create<CrmState>((set, get) => ({
       localQuotes.forEach((q) => quoteMap.set(q.id, q));
       workspace.quotations.forEach((q) => quoteMap.set(q.id, q));
 
+      // Merge: Initial trippings + local trippings + Firestore trippings
+      const localTrips = [
+        ...getLocalTrippings(agentUid),
+        ...getLocalTrippings("default"),
+      ];
+      const tripMap = new Map<string, TrippingScheduleItem>();
+      INITIAL_TRIPPINGS.forEach((t) => tripMap.set(t.id, t));
+      get().trippings.forEach((t) => tripMap.set(t.id, t));
+      localTrips.forEach((t) => tripMap.set(t.id, t));
+      (workspace.trippings || []).forEach((t) => tripMap.set(t.id, t));
+
       set({
         leads: workspace.leads.length > 0 ? workspace.leads : get().leads,
         properties: Array.from(propMap.values()),
         messages: workspace.messages.length > 0 ? workspace.messages : get().messages,
         deals: workspace.deals.length > 0 ? workspace.deals : get().deals,
         quotations: Array.from(quoteMap.values()),
+        trippings: Array.from(tripMap.values()),
         selectedLeadId: workspace.leads[0]?.id ?? get().selectedLeadId,
+        messengerSettings: agentMessengerSettings,
         isSyncingFirestore: false,
       });
     } catch {
       set({ isSyncingFirestore: false });
     }
+  },
+
+  updateMessengerSettings: async (partial) => {
+    const current = get().messengerSettings;
+    const agentUid = get().activeAgentUid || "demo-agent-marco";
+    const updated: AgentMessengerSettings = {
+      pageId: partial.pageId ?? current?.pageId ?? "",
+      pageName: partial.pageName ?? current?.pageName ?? "",
+      pageAccessToken: partial.pageAccessToken ?? current?.pageAccessToken ?? "",
+      appSecret: partial.appSecret ?? current?.appSecret ?? "",
+      verifyToken: partial.verifyToken ?? current?.verifyToken ?? "propflow_meta_verify_secret_2026",
+      isConnected: partial.isConnected ?? current?.isConnected ?? false,
+      lastVerifiedAt:
+        partial.lastVerifiedAt !== undefined
+          ? partial.lastVerifiedAt
+          : current?.lastVerifiedAt ?? null,
+      autoReplyGreeting:
+        partial.autoReplyGreeting ?? current?.autoReplyGreeting ?? true,
+      greetingMessage:
+        partial.greetingMessage ??
+        current?.greetingMessage ??
+        "Hi {name}! Thanks for reaching out to us. Are you interested in pre-selling or ready-for-occupancy units?",
+      updatedAt: new Date().toISOString(),
+    };
+
+    set({ messengerSettings: updated });
+    await saveAgentMessengerSettings(agentUid, updated);
   },
 
   setSelectedLeadId: (id) => set({ selectedLeadId: id }),
@@ -1060,7 +1193,9 @@ export const useCrmStore = create<CrmState>((set, get) => ({
       ...input,
       id: crypto.randomUUID(),
       assignedAgentId: agentUid,
-      tags: ["CSV Import"],
+      tags: input.tags?.length
+        ? Array.from(new Set(["CSV Import", ...input.tags]))
+        : ["CSV Import"],
       documents: [],
       lastContactedAt: new Date(),
       createdAt: new Date(),
@@ -1199,6 +1334,59 @@ export const useCrmStore = create<CrmState>((set, get) => ({
     }
   },
 
+  addTripping: (tripInput) => {
+    const id = `trip-${Date.now()}`;
+    const newTrip: TrippingScheduleItem = {
+      ...tripInput,
+      id,
+      status: tripInput.status || "CONFIRMED",
+      createdAt: new Date().toISOString(),
+    };
+    const activeUid = get().activeAgentUid;
+    saveLocalTripping(newTrip, activeUid);
+    saveLocalTripping(newTrip, "default");
+    if (activeUid) {
+      void persistAgentDocument(activeUid, "trippings", newTrip);
+    }
+
+    set((state) => ({
+      trippings: [newTrip, ...state.trippings.filter((t) => t.id !== id)],
+    }));
+
+    if (newTrip.leadId) {
+      get().moveLeadStage(newTrip.leadId, "SITE_TRIPPING");
+    }
+
+    return newTrip;
+  },
+
+  updateTrippingStatus: (id, status) => {
+    const activeUid = get().activeAgentUid;
+    const target = get().trippings.find((t) => t.id === id);
+    if (!target) return;
+    const updated: TrippingScheduleItem = { ...target, status };
+    saveLocalTripping(updated, activeUid);
+    saveLocalTripping(updated, "default");
+    if (activeUid) {
+      void persistAgentDocument(activeUid, "trippings", updated);
+    }
+    set((state) => ({
+      trippings: state.trippings.map((t) => (t.id === id ? updated : t)),
+    }));
+  },
+
+  deleteTripping: (id) => {
+    const activeUid = get().activeAgentUid;
+    deleteLocalTripping(id, activeUid);
+    deleteLocalTripping(id, "default");
+    if (activeUid) {
+      void deleteAgentDocument(activeUid, "trippings", id);
+    }
+    set((state) => ({
+      trippings: state.trippings.filter((t) => t.id !== id),
+    }));
+  },
+
   addLeadNote: (leadId, noteText) => {
     set((state) => ({
       leads: state.leads.map((lead) =>
@@ -1240,6 +1428,40 @@ export const useCrmStore = create<CrmState>((set, get) => ({
               ...l,
               lastContactedAt: new Date(),
               stage: l.stage === "NEW_LEAD" ? "CONTACTED" : l.stage,
+              updatedAt: new Date(),
+            }
+          : l
+      ),
+    }));
+
+    void persistAgentDocument(get().activeAgentUid, "messages", newMsg);
+    const updatedLead = get().leads.find((l) => l.id === leadId);
+    if (updatedLead) {
+      void persistAgentDocument(get().activeAgentUid, "leads", updatedLead);
+    }
+    return newMsg;
+  },
+
+  sendClientPortalMessage: (leadId, content, attachedQuotationId) => {
+    const newMsg: Message = {
+      id: crypto.randomUUID(),
+      leadId,
+      senderType: "LEAD",
+      senderId: leadId,
+      channel: "FACEBOOK_MESSENGER",
+      content,
+      attachedQuotationId: attachedQuotationId ?? null,
+      deliveryStatus: "DELIVERED",
+      createdAt: new Date(),
+    };
+
+    set((state) => ({
+      messages: [...state.messages, newMsg],
+      leads: state.leads.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              lastContactedAt: new Date(),
               updatedAt: new Date(),
             }
           : l

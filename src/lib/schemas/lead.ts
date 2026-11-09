@@ -239,6 +239,7 @@ export const CreateLeadInputSchema = z
       .enum(["BANK", "PAG_IBIG", "IN_HOUSE", "SPOT_CASH", "UNDECIDED"])
       .default("BANK"),
     notes: z.string().max(5000).optional(),
+    tags: z.array(z.string()).optional(),
     nextFollowUpAt: z.coerce.date().optional().nullable(),
   })
   .refine((data) => data.budgetMax >= data.budgetMin, {

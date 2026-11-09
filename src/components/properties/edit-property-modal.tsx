@@ -18,7 +18,7 @@ import {
   Loader2,
   MapPin,
   Maximize2,
-  Sparkles,
+  FileText,
   Trash2,
   Video,
 } from "lucide-react";
@@ -61,6 +61,7 @@ export function EditPropertyModal({
   const [isUploadingPhoto, setIsUploadingPhoto] = React.useState(false);
   const [isUploadingVideo, setIsUploadingVideo] = React.useState(false);
   const [uploadedPhotoPreview, setUploadedPhotoPreview] = React.useState<string | null>(null);
+  const [galleryUrlsText, setGalleryUrlsText] = React.useState<string>("");
   const [isConfirmingDelete, setIsConfirmingDelete] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -116,6 +117,7 @@ export function EditPropertyModal({
         videoWalkthroughUrl: property.videoWalkthroughUrl || "",
       });
       setUploadedPhotoPreview(property.thumbnailUrl || null);
+      setGalleryUrlsText((property.galleryImages || []).join("\n"));
       setIsConfirmingDelete(false);
     }
   }, [property, isOpen, form]);
@@ -173,12 +175,26 @@ export function EditPropertyModal({
         values.thumbnailUrl,
         values.propertyType
       );
-      const safeGallery =
-        values.galleryImages && values.galleryImages.length > 0
-          ? values.galleryImages.map((img) =>
-              getSafePropertyImageUrl(img, values.propertyType)
-            )
+
+      const parsedGallery = galleryUrlsText
+        .split(/[\n,]+/)
+        .map((u) => u.trim())
+        .filter((u) => u.length > 5);
+
+      const rawGalleryList =
+        parsedGallery.length > 0
+          ? parsedGallery
+          : values.galleryImages && values.galleryImages.length > 0
+          ? values.galleryImages
           : [safeThumbnail];
+
+      const safeGallery = Array.from(
+        new Set(
+          rawGalleryList.map((img) =>
+            getSafePropertyImageUrl(img, values.propertyType)
+          )
+        )
+      );
 
       onSave(property.id, {
         ...values,
@@ -570,12 +586,12 @@ export function EditPropertyModal({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor="edit-prop-thumb" className="text-[11px] text-muted-foreground">
-                    Or Direct Cover Photo URL
+                    Or Direct Cover Photo URL (Drive, OneDrive, Web)
                   </Label>
                   <Input
                     id="edit-prop-thumb"
-                    className="h-8 text-xs"
-                    placeholder="https://images.unsplash.com/..."
+                    className="h-8 text-xs font-mono"
+                    placeholder="https://drive.google.com/file/d/... or https://..."
                     {...form.register("thumbnailUrl")}
                   />
                 </div>
@@ -586,11 +602,35 @@ export function EditPropertyModal({
                   </Label>
                   <Input
                     id="edit-prop-video"
-                    className="h-8 text-xs"
+                    className="h-8 text-xs font-mono"
                     placeholder="https://.../walkthrough.mp4"
                     {...form.register("videoWalkthroughUrl")}
                   />
                 </div>
+              </div>
+
+              {/* Additional Gallery Photo URLs */}
+              <div className="space-y-1 rounded-lg border border-dashed bg-muted/20 p-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="edit-prop-gallery-links" className="text-xs font-semibold flex items-center gap-1.5">
+                    <ImagePlus className="h-3 w-3 text-primary" />
+                    Additional Gallery Image URLs (One link per line)
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    {galleryUrlsText.split(/[\n,]+/).filter((u) => u.trim().length > 5).length} photo links
+                  </span>
+                </div>
+                <textarea
+                  id="edit-prop-gallery-links"
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  placeholder={"https://drive.google.com/file/d/1A2B3C4D...\nhttps://onedrive.live.com/embed?resid=...\nhttps://images.unsplash.com/..."}
+                  value={galleryUrlsText}
+                  onChange={(e) => setGalleryUrlsText(e.target.value)}
+                />
+                <p className="text-[10px] text-muted-foreground leading-normal">
+                  💡 <strong>No file uploads required:</strong> You can paste your Google Drive, OneDrive, Dropbox, or CDN photo links directly. For Google Drive files, simply ensure sharing is set to <em>&ldquo;Anyone with the link can view&rdquo;</em> and PropFlow will stream them automatically!
+                </p>
               </div>
 
               {/* Live Preview */}
@@ -626,7 +666,7 @@ export function EditPropertyModal({
             {/* SECTION 6: STOREFRONT DESCRIPTION */}
             <div className="rounded-xl border bg-card/60 p-4 space-y-2">
               <Label htmlFor="edit-prop-desc" className="text-xs font-semibold flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                <FileText className="h-3.5 w-3.5 text-primary" />
                 Storefront Highlight &amp; Description
               </Label>
               <Input

@@ -9,10 +9,13 @@ import {
   Calculator,
   CheckCheck,
   FileSpreadsheet,
+  Globe2,
   MapPin,
+  MessageCircle,
   MessageSquarePlus,
+  Radio,
   Send,
-  Sparkles,
+  Settings,
   User,
   Wallet,
   Zap,
@@ -25,6 +28,9 @@ import {
   SAVED_REPLY_SNIPPETS,
   useCrmStore,
 } from "@/lib/store/crm-store";
+import { MessengerSettingsModal } from "@/components/inbox/messenger-settings-modal";
+import { WhatsAppViberShareModal } from "@/components/quotations/whatsapp-viber-share-modal";
+import { useAuth } from "@/lib/firebase/auth-context";
 import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -50,13 +56,17 @@ function InboxContent() {
     sendMessage,
     receiveWebhookMessage,
     moveLeadStage,
+    messengerSettings,
   } = useCrmStore();
+  const { agentProfile } = useAuth();
 
   const [activeLeadId, setActiveLeadId] = React.useState<string>(
     queryLeadId || leads[0]?.id || ""
   );
   const [draftText, setDraftText] = React.useState("");
   const [showSnippets, setShowSnippets] = React.useState(false);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [shareModalOpen, setShareModalOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (queryLeadId) {
@@ -64,9 +74,20 @@ function InboxContent() {
     }
   }, [queryLeadId]);
 
+  const openSettingsParam = searchParams.get("openSettings");
+  React.useEffect(() => {
+    if (openSettingsParam === "true") {
+      setSettingsOpen(true);
+    }
+  }, [openSettingsParam]);
+
   const activeLead = React.useMemo(
     () => leads.find((l) => l.id === activeLeadId) ?? leads[0],
     [leads, activeLeadId]
+  );
+
+  const isPageConnected = Boolean(
+    messengerSettings?.isConnected && messengerSettings?.pageId
   );
 
   const threadMessages = React.useMemo(
@@ -80,12 +101,30 @@ function InboxContent() {
     [messages, activeLead]
   );
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeLead || !draftText.trim()) return;
-    sendMessage(activeLead.id, draftText.trim());
+    const textToSend = draftText.trim();
+    sendMessage(activeLead.id, textToSend);
     setDraftText("");
     setShowSnippets(false);
+
+    // If connected to Facebook Page and buyer has a PSID, dispatch to Meta Send API
+    if (activeLead.messengerPsid && isPageConnected && messengerSettings?.pageAccessToken) {
+      try {
+        void fetch("/api/messenger/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recipientPsid: activeLead.messengerPsid,
+            text: textToSend,
+            pageAccessToken: messengerSettings.pageAccessToken,
+          }),
+        });
+      } catch (err) {
+        console.warn("Outbound Messenger send notice:", err);
+      }
+    }
   };
 
   const handleInsertSnippet = (body: string) => {
@@ -172,22 +211,57 @@ function InboxContent() {
       {/* LEFT PANE: Conversations Thread List */}
       <div className="w-full min-w-0 border-b md:w-72 md:shrink-0 md:border-b-0 md:border-r flex flex-col bg-card">
         <div className="flex items-center justify-between border-b p-3">
-          <div>
-            <h2 className="text-sm font-bold">Meta Messenger Hub</h2>
-            <p className="text-[11px] text-muted-foreground">
-              Graph API Webhook Connected
+          <div className="min-w-0 pr-1">
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-sm font-bold truncate">Messenger Hub</h2>
+              {isPageConnected ? (
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="inline-flex items-center gap-1 text-[10px] text-pipeline-won font-medium hover:underline shrink-0"
+                  title="Page Connected - Click to view Channel Settings"
+                >
+                  <Radio className="h-2 w-2 animate-pulse text-pipeline-won" />
+                  Active
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="inline-flex items-center text-[10px] text-amber-500 font-medium hover:underline shrink-0"
+                  title="Click to Connect Facebook Page"
+                >
+                  Connect Page
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground truncate">
+              {isPageConnected
+                ? messengerSettings?.pageName || "Facebook Page Active"
+                : "Multi-Agent Routing Ready"}
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-[11px] gap-1"
-            onClick={handleSimulateIncomingWebhook}
-            title="Simulate Meta Graph API POST Webhook Event"
-          >
-            <Zap className="h-3 w-3 text-pipeline-proposal" />
-            Simulate Webhook
-          </Button>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setSettingsOpen(true)}
+              title="Messenger Channel Settings (Page Access Token & Webhook)"
+            >
+              <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px] px-2 gap-1"
+              onClick={handleSimulateIncomingWebhook}
+              title="Simulate Meta Graph API POST Webhook Event"
+            >
+              <Zap className="h-3 w-3 text-pipeline-proposal" />
+              <span className="hidden sm:inline">Simulate</span>
+            </Button>
+          </div>
         </div>
 
         <div className="flex md:flex-col overflow-x-auto md:overflow-y-auto divide-x md:divide-x-0 md:divide-y">
@@ -353,6 +427,17 @@ function InboxContent() {
                   </SheetContent>
                 </Sheet>
 
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1 text-emerald-600 border-emerald-500/30 hover:bg-emerald-500/10 dark:text-emerald-400"
+                  onClick={() => setShareModalOpen(true)}
+                  title="Generate formatted WhatsApp / Viber property card"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">WhatsApp</span>
+                </Button>
+
                 <Button variant="outline" size="sm" className="h-7 text-xs gap-1" asChild>
                   <Link href={`/quotations?leadId=${activeLead.id}`}>
                     <Calculator className="h-3.5 w-3.5" />
@@ -409,7 +494,7 @@ function InboxContent() {
               <div className="border-t bg-muted/40 p-3 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold flex items-center gap-1">
-                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    <Zap className="h-3.5 w-3.5 text-primary" />
                     Saved Agent Reply Snippets
                   </span>
                   <Button
@@ -443,6 +528,35 @@ function InboxContent() {
                 </div>
               </div>
             )}
+
+            {/* Channel Dispatch Status Indicator */}
+            <div className="flex items-center justify-between border-t bg-muted/20 px-3.5 py-1 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-1.5 truncate">
+                {isPageConnected ? (
+                  <>
+                    <Globe2 className="h-3 w-3 text-primary shrink-0" />
+                    <span className="truncate">
+                      Replying via Page:{" "}
+                      <strong className="text-foreground font-semibold">
+                        {messengerSettings?.pageName || messengerSettings?.pageId}
+                      </strong>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-amber-500 font-medium">⚠️ No Page Connected.</span>
+                    <span className="truncate">Replies stay internal in CRM.</span>
+                  </>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="text-primary hover:underline font-medium shrink-0 ml-2 text-[10px]"
+              >
+                {isPageConnected ? "Channel Settings" : "Connect Page"}
+              </button>
+            </div>
 
             {/* Composer Input Bar */}
             <form
@@ -578,6 +692,63 @@ function InboxContent() {
           </div>
         </div>
       )}
+      {/* Messenger Channel Settings Modal */}
+      <MessengerSettingsModal
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+      />
+
+      {/* WhatsApp / Viber Quick Share Modal */}
+      {activeLead &&
+        (() => {
+          const bestProp =
+            properties.find(
+              (p) =>
+                p.listPrice <= activeLead.budgetMax * 1.15 &&
+                p.listPrice >= activeLead.budgetMin * 0.8
+            ) ?? properties[0];
+
+          const listPrice = bestProp?.listPrice ?? 15000000;
+          const rf = bestProp?.reservationFee ?? 25000;
+          const dp20 = listPrice * 0.2 - rf;
+          const monthlyDp = dp20 / 24;
+          const loan80 = listPrice * 0.8;
+          const r = 0.075 / 12;
+          const n = 180;
+          const monthlyAmort =
+            (loan80 * (r * Math.pow(1 + r, n))) / (Math.pow(1 + r, n) - 1);
+
+          return (
+            <WhatsAppViberShareModal
+              open={shareModalOpen}
+              onOpenChange={setShareModalOpen}
+              quotationData={{
+                projectName: bestProp?.projectName ?? "Premier Condominium",
+                unitCode: bestProp?.unitCode ?? "Unit Spec",
+                floorAreaSqm: bestProp?.floorAreaSqm ?? 65,
+                locationCity: bestProp?.locationCity ?? "Metro Manila",
+                totalContractPrice: listPrice,
+                reservationFee: rf,
+                monthlyDownPayment: monthlyDp,
+                downPaymentMonths: 24,
+                monthlyAmortization: monthlyAmort,
+                loanTenorYears: 15,
+                annualInterestRate: 7.5,
+                buyerName: `${activeLead.firstName} ${activeLead.lastName}`,
+                buyerPhone: activeLead.phone,
+                agentName: agentProfile?.fullName || "Licensed Real Estate Broker",
+                agentLicense: agentProfile?.prcLicenseNumber || "PRC Accredited",
+                shareUrl: `${
+                  typeof window !== "undefined"
+                    ? window.location.origin
+                    : "https://propflow.ph"
+                }/quote/${activeLead.id.slice(0, 8)}?leadId=${
+                  activeLead.id
+                }&unit=${encodeURIComponent(bestProp?.unitCode ?? "")}`,
+              }}
+            />
+          );
+        })()}
     </div>
   );
 }

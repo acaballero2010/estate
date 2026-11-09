@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import * as React from "react";
 import { Instrument_Serif, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import dynamic from "next/dynamic";
 import "./globals.css";
@@ -58,7 +59,9 @@ export default function RootLayout({
         className={`${plusJakartaSans.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} font-sans antialiased`}
       >
         <Providers>
-          <AppShell>{children}</AppShell>
+          <React.Suspense fallback={<div className="min-h-screen bg-background" />}>
+            <AppShell>{children}</AppShell>
+          </React.Suspense>
         </Providers>
       </body>
     </html>

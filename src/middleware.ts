@@ -12,6 +12,8 @@ const PROTECTED_PREFIXES = [
   "/properties",
   "/inbox",
   "/trippings",
+  "/settings",
+  "/admin",
 ];
 
 export function middleware(request: NextRequest) {
@@ -44,6 +46,8 @@ export const config = {
     "/properties/:path*",
     "/inbox/:path*",
     "/trippings/:path*",
+    "/settings/:path*",
+    "/admin/:path*",
   ],
 };
 

@@ -1,8 +1,9 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
   Building2,
@@ -24,6 +25,8 @@ import {
   ChevronRight,
   LogIn,
   LogOut,
+  Settings,
+  ShieldCheck,
   UserCheck,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -45,6 +48,7 @@ import { Badge } from "@/components/ui/badge";
 
 interface NavItem {
   title: string;
+  shortTitle?: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: string | number;
@@ -52,6 +56,7 @@ interface NavItem {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { user, agentProfile, loading, signOut } = useAuth();
@@ -60,11 +65,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [globalQuery, setGlobalQuery] = React.useState("");
   const [searchFocused, setSearchFocused] = React.useState(false);
 
+  const isShowcase =
+    pathname === "/showcase" || pathname?.startsWith("/showcase");
+  const isQuotations =
+    pathname === "/quotations" || pathname?.startsWith("/quotations");
+
   const isPublicRoute =
     pathname === "/" ||
     pathname === "/login" ||
     pathname?.startsWith("/quote/") ||
-    pathname === "/inquire";
+    pathname === "/inquire" ||
+    isShowcase ||
+    isQuotations;
 
   React.useEffect(() => {
     if (!isPublicRoute && !loading && !user) {
@@ -76,56 +88,81 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     () => [
       {
         title: "Command Center",
+        shortTitle: "Home",
         href: "/dashboard",
         icon: LayoutDashboard,
       },
       {
         title: "Pipeline",
+        shortTitle: "Pipeline",
         href: "/pipeline",
         icon: Kanban,
         badge: leads.length,
       },
       {
         title: "Messenger Hub",
+        shortTitle: "Messages",
         href: "/inbox",
         icon: MessageSquareText,
         badge: leads.filter((l) => Boolean(l.messengerPsid)).length,
       },
       {
         title: "Quotations",
+        shortTitle: "Quotes",
         href: "/quotations",
         icon: Calculator,
       },
       {
         title: "Site Trippings",
+        shortTitle: "Trippings",
         href: "/trippings",
         icon: CalendarCheck,
         badge: leads.filter((l) => l.stage === "SITE_TRIPPING").length || 2,
       },
       {
         title: "Deals & Closing",
+        shortTitle: "Deals",
         href: "/deals",
         icon: FileCheck2,
         badge: deals.length,
       },
       {
         title: "Properties",
+        shortTitle: "Inventory",
         href: "/properties",
         icon: Building2,
         badge: properties.length,
       },
       {
         title: "Showcase",
+        shortTitle: "Showcase",
         href: "/showcase",
         icon: Film,
       },
       {
         title: "Lead Form",
+        shortTitle: "Form",
         href: "/inquire",
         icon: Globe,
       },
+      {
+        title: "Settings",
+        shortTitle: "Settings",
+        href: "/settings",
+        icon: Settings,
+      },
+      ...(agentProfile?.role === "ADMIN" || agentProfile?.isPlatformAdmin
+        ? [
+            {
+              title: "Platform Admin",
+              href: "/admin",
+              icon: ShieldCheck,
+              badge: "Admin",
+            },
+          ]
+        : []),
     ],
-    [leads, deals, properties]
+    [leads, deals, properties, agentProfile]
   );
 
   const searchResults = React.useMemo(() => {
@@ -158,14 +195,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [globalQuery, leads, properties, deals]);
 
   const initials = React.useMemo(() => {
-    const name = agentProfile?.fullName || "Marco Reyes";
+    const name = agentProfile?.fullName || user?.displayName || "Agent";
     return name
       .split(" ")
       .slice(0, 2)
       .map((n) => n[0])
       .join("")
       .toUpperCase();
-  }, [agentProfile]);
+  }, [agentProfile?.fullName, user?.displayName]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -176,7 +213,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     pathname === "/" ||
     pathname === "/login" ||
     pathname?.startsWith("/quote/") ||
-    pathname === "/inquire";
+    pathname === "/inquire" ||
+    isShowcase ||
+    (isQuotations && !user);
 
   if (!isPublicRoute && loading) {
     return (
@@ -211,10 +250,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           isCollapsed ? "md:w-16" : "md:w-60"
         )}
       >
-        <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-3.5">
+        <div
+          className={cn(
+            "flex h-14 items-center border-b border-sidebar-border transition-all",
+            isCollapsed ? "justify-center px-2 relative" : "justify-between px-3.5"
+          )}
+        >
           <Link
             href="/dashboard"
-            className="flex items-center gap-2.5 font-semibold tracking-tight"
+            className={cn(
+              "flex items-center font-semibold tracking-tight transition-all",
+              isCollapsed ? "justify-center" : "gap-2.5"
+            )}
+            title="PropFlow Estates"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
               <Building2 className="h-4 w-4" />
@@ -230,15 +278,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             )}
           </Link>
+
+          {/* Chevron Expand/Collapse Toggle Button */}
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            className={cn(
+              "text-muted-foreground hover:text-foreground transition-all",
+              isCollapsed
+                ? "absolute -right-3 top-3.5 h-6 w-6 rounded-full border bg-background shadow-xs hover:bg-accent hover:text-primary z-40"
+                : "h-7 w-7"
+            )}
             onClick={() => setIsCollapsed((prev) => !prev)}
-            aria-label="Toggle Sidebar"
+            aria-label={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
             {isCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3.5 w-3.5" />
             ) : (
               <ChevronLeft className="h-4 w-4" />
             )}
@@ -254,14 +310,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                title={item.title}
                 className={cn(
-                  "group flex items-center justify-between rounded-md px-2.5 py-2 text-xs font-medium transition-colors",
+                  "group flex items-center rounded-md text-xs font-medium transition-colors relative",
+                  isCollapsed
+                    ? "h-10 w-10 mx-auto justify-center p-0"
+                    : "justify-between px-2.5 py-2",
                   isActive
                     ? "bg-primary/10 text-primary font-semibold"
                     : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )}
               >
-                <div className="flex items-center gap-2.5">
+                <div
+                  className={cn(
+                    "flex items-center",
+                    isCollapsed ? "justify-center" : "gap-2.5"
+                  )}
+                >
                   <Icon
                     className={cn(
                       "h-4 w-4 shrink-0",
@@ -280,59 +345,94 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     {item.badge}
                   </Badge>
                 )}
+                {isCollapsed && item.badge !== undefined && (
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary ring-2 ring-sidebar" />
+                )}
               </Link>
             );
           })}
         </nav>
 
         {/* Agent Footer Profile */}
-        <div className="border-t border-sidebar-border p-3 space-y-2">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-              {initials}
-            </div>
-            {!isCollapsed && (
-              <div className="flex flex-1 flex-col overflow-hidden">
-                <div className="flex items-center gap-1">
-                  <span className="truncate text-xs font-semibold">
-                    {agentProfile?.fullName}
-                  </span>
-                  {user && (
-                    <UserCheck className="h-3 w-3 shrink-0 text-pipeline-won" />
-                  )}
-                </div>
-                <span className="truncate text-[11px] text-muted-foreground">
-                  {agentProfile?.prcLicenseNumber}
-                </span>
-              </div>
+        <div
+          className={cn(
+            "border-t border-sidebar-border",
+            isCollapsed ? "p-2 flex flex-col items-center gap-2" : "p-3 space-y-2"
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-center",
+              isCollapsed ? "justify-center w-full" : "justify-between gap-2.5"
             )}
-          </div>
-          {!isCollapsed && (
-            <div>
-              {user ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 w-full text-[11px] gap-1.5"
-                  onClick={handleSignOut}
-                >
-                  <LogOut className="h-3 w-3" />
-                  Sign Out
-                </Button>
-              ) : (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="h-7 w-full text-[11px] gap-1.5"
-                  asChild
-                >
-                  <Link href="/login">
-                    <LogIn className="h-3 w-3" />
-                    Agent Login / Register
-                  </Link>
-                </Button>
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary overflow-hidden ring-1 ring-border">
+                {agentProfile?.avatarUrl ? (
+                  <img
+                    src={agentProfile.avatarUrl}
+                    alt={agentProfile.fullName || "Agent"}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  initials
+                )}
+              </div>
+              {!isCollapsed && (
+                <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+                  <div className="flex items-center gap-1">
+                    <span className="truncate text-xs font-semibold">
+                      {agentProfile?.fullName || "Agent"}
+                    </span>
+                    {user && (
+                      <UserCheck className="h-3 w-3 shrink-0 text-pipeline-won" />
+                    )}
+                  </div>
+                  <span className="truncate text-[11px] text-muted-foreground font-mono">
+                    {agentProfile?.prcLicenseNumber || "PRC Accredited"}
+                  </span>
+                </div>
               )}
             </div>
+
+            {!isCollapsed && user && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
+                onClick={handleSignOut}
+                title="Sign Out"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+
+          {!user && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className={cn("text-[11px] gap-1.5", isCollapsed ? "h-8 w-8 p-0" : "h-7 w-full")}
+              asChild
+              title="Agent Login / Register"
+            >
+              <Link href="/login">
+                <LogIn className="h-3.5 w-3.5" />
+                {!isCollapsed && <span>Agent Sign In</span>}
+              </Link>
+            </Button>
+          )}
+
+          {isCollapsed && user && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 mx-auto text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              onClick={handleSignOut}
+              title="Sign Out"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </Button>
           )}
         </div>
       </aside>
@@ -406,7 +506,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Sheet>
 
             {/* Quick Global Search */}
-            <div className="relative w-full max-w-[220px] sm:max-w-xs">
+            <div className="relative w-full max-w-[140px] sm:max-w-xs transition-all">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 type="search"
@@ -514,8 +614,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
               </Button>
             ) : (
-              <Badge variant="won" className="hidden sm:inline-flex text-[10px] gap-1">
-                <UserCheck className="h-3 w-3" />
+              <Badge variant="won" className="hidden sm:inline-flex text-[10px] gap-1.5 items-center">
+                {agentProfile?.avatarUrl ? (
+                  <img
+                    src={agentProfile.avatarUrl}
+                    alt=""
+                    className="h-3.5 w-3.5 rounded-full object-cover"
+                  />
+                ) : (
+                  <UserCheck className="h-3 w-3" />
+                )}
                 {agentProfile?.fullName}
               </Badge>
             )}
@@ -586,7 +694,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Scrollable Page Body (scrollbar only covers the body below header) */}
-        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden pb-16 md:pb-0">
+        <main className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden no-scrollbar pb-16 md:pb-0">
           {children}
         </main>
       </div>
@@ -609,7 +717,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               )}
             >
               <Icon className="h-4 w-4" />
-              <span className="truncate max-w-[68px]">{item.title}</span>
+              <span className="truncate max-w-[68px] text-[10px] leading-tight text-center">
+                {item.shortTitle || item.title}
+              </span>
               {item.badge !== undefined && (
                 <span className="absolute right-1.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
                   {item.badge}

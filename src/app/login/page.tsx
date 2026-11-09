@@ -17,7 +17,8 @@ import {
   ArrowLeft,
   Sun,
   Moon,
-  Sparkles,
+  ExternalLink,
+  UserCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { Button } from "@/components/ui/button";
@@ -206,7 +207,7 @@ export default function LoginPage() {
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" asChild>
             <Link href="/inquire">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <ExternalLink className="h-3.5 w-3.5 text-primary" />
               <span>Client Portal</span>
             </Link>
           </Button>
@@ -499,7 +500,7 @@ export default function LoginPage() {
                   disabled={isSubmitting}
                   onClick={handleDemoSignIn}
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <UserCheck className="h-3.5 w-3.5" />
                   Instant Sign-In with Demo Broker Account
                 </Button>
               </div>

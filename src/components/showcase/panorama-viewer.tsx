@@ -9,7 +9,6 @@ import {
   Play,
   Plus,
   RotateCcw,
-  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -353,7 +352,7 @@ export function PanoramaViewer({
         {/* Top Floating Instruction Pill */}
         <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-md shadow">
-            <Sparkles className="h-3 w-3 text-primary" />
+            <Compass className="h-3 w-3 text-sky-400" />
             Click &amp; drag mouse or swipe to look 360° around
           </span>
         </div>

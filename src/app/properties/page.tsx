@@ -17,6 +17,7 @@ import {
   Coins,
   Download,
   FileSpreadsheet,
+  FileText,
   Film,
   Grid3X3,
   Home,
@@ -31,7 +32,6 @@ import {
   Plus,
   Share2,
   ShieldCheck,
-  Sparkles,
   Upload,
   UserCheck,
   Video,
@@ -116,6 +116,7 @@ export default function PropertiesPage() {
   const [isUploadingPhoto, setIsUploadingPhoto] = React.useState(false);
   const [isUploadingVideo, setIsUploadingVideo] = React.useState(false);
   const [uploadedPhotoPreview, setUploadedPhotoPreview] = React.useState<string | null>(null);
+  const [addGalleryUrlsText, setAddGalleryUrlsText] = React.useState<string>("");
   const [selectedStackCell, setSelectedStackCell] = React.useState<StackingCell | null>(null);
   const [selectedSocialProperty, setSelectedSocialProperty] = React.useState<Property | null>(null);
   const [isSocialModalOpen, setIsSocialModalOpen] = React.useState(false);
@@ -248,12 +249,26 @@ export default function PropertiesPage() {
       values.thumbnailUrl,
       values.propertyType
     );
-    const safeGallery =
-      values.galleryImages && values.galleryImages.length > 0
-        ? values.galleryImages.map((img) =>
-            getSafePropertyImageUrl(img, values.propertyType)
-          )
+
+    const parsedGallery = addGalleryUrlsText
+      .split(/[\n,]+/)
+      .map((u) => u.trim())
+      .filter((u) => u.length > 5);
+
+    const rawGalleryList =
+      parsedGallery.length > 0
+        ? parsedGallery
+        : values.galleryImages && values.galleryImages.length > 0
+        ? values.galleryImages
         : [safeThumbnail];
+
+    const safeGallery = Array.from(
+      new Set(
+        rawGalleryList.map((img) =>
+          getSafePropertyImageUrl(img, values.propertyType)
+        )
+      )
+    );
 
     const created = addProperty({
       ...values,
@@ -268,6 +283,7 @@ export default function PropertiesPage() {
     );
     setIsAddOpen(false);
     setUploadedPhotoPreview(null);
+    setAddGalleryUrlsText("");
     form.reset();
 
     if (openQuoteAfterSave) {
@@ -371,12 +387,15 @@ export default function PropertiesPage() {
             turnoverDate: row.turnoverDate?.trim() || "Pre-selling",
             description: row.description?.trim() || "Accredited residential unit.",
             amenities: ["Swimming Pool", "24/7 Security", "Clubhouse"],
-            thumbnailUrl:
-              row.thumbnailUrl?.trim() ||
-              "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+            thumbnailUrl: getSafePropertyImageUrl(
+              row.thumbnailUrl?.trim(),
+              row.propertyType
+            ),
             galleryImages: [
-              row.thumbnailUrl?.trim() ||
-                "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+              getSafePropertyImageUrl(
+                row.thumbnailUrl?.trim(),
+                row.propertyType
+              ),
             ],
             videoWalkthroughUrl: row.videoWalkthroughUrl?.trim() || undefined,
             listedByAgentId: user?.uid || "agent-direct-listing",
@@ -954,12 +973,12 @@ export default function PropertiesPage() {
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="space-y-1">
                         <Label htmlFor="prop-thumb" className="text-[11px] text-muted-foreground">
-                          Or Direct Cover Photo URL
+                          Or Direct Cover Photo URL (Drive, OneDrive, Web)
                         </Label>
                         <Input
                           id="prop-thumb"
-                          className="h-8 text-xs"
-                          placeholder="https://images.unsplash.com/..."
+                          className="h-8 text-xs font-mono"
+                          placeholder="https://drive.google.com/file/d/... or https://..."
                           {...form.register("thumbnailUrl")}
                         />
                       </div>
@@ -970,11 +989,35 @@ export default function PropertiesPage() {
                         </Label>
                         <Input
                           id="prop-video"
-                          className="h-8 text-xs"
+                          className="h-8 text-xs font-mono"
                           placeholder="https://.../walkthrough.mp4"
                           {...form.register("videoWalkthroughUrl")}
                         />
                       </div>
+                    </div>
+
+                    {/* Additional Gallery Photo URLs */}
+                    <div className="space-y-1 rounded-lg border border-dashed bg-muted/20 p-3">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="prop-gallery-links" className="text-xs font-semibold flex items-center gap-1.5">
+                          <ImagePlus className="h-3 w-3 text-primary" />
+                          Additional Gallery Image URLs (One link per line)
+                        </Label>
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          {addGalleryUrlsText.split(/[\n,]+/).filter((u) => u.trim().length > 5).length} photo links
+                        </span>
+                      </div>
+                      <textarea
+                        id="prop-gallery-links"
+                        rows={3}
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                        placeholder={"https://drive.google.com/file/d/1A2B3C4D...\nhttps://onedrive.live.com/embed?resid=...\nhttps://images.unsplash.com/..."}
+                        value={addGalleryUrlsText}
+                        onChange={(e) => setAddGalleryUrlsText(e.target.value)}
+                      />
+                      <p className="text-[10px] text-muted-foreground leading-normal">
+                        💡 <strong>No file uploads required:</strong> You can paste your Google Drive, OneDrive, Dropbox, or CDN photo links directly. For Google Drive files, simply ensure sharing is set to <em>&ldquo;Anyone with the link can view&rdquo;</em> and PropFlow will stream them automatically!
+                      </p>
                     </div>
 
                     {/* Live Photo Preview */}
@@ -1004,7 +1047,7 @@ export default function PropertiesPage() {
                   {/* SECTION 6: STOREFRONT DESCRIPTION */}
                   <div className="rounded-xl border bg-card/60 p-4 space-y-2">
                     <Label htmlFor="prop-desc" className="text-xs font-semibold flex items-center gap-1.5">
-                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      <FileText className="h-3.5 w-3.5 text-primary" />
                       Storefront Highlight &amp; Marketing Teaser
                     </Label>
                     <Input
@@ -1428,7 +1471,7 @@ export default function PropertiesPage() {
             <Card className="min-w-0 lg:col-span-4 h-fit">
               <CardHeader className="border-b bg-muted/20 p-4">
                 <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
+                  <Layers className="h-4 w-4 text-primary" />
                   Stacking Unit Inspector
                 </CardTitle>
                 <CardDescription className="text-xs">
