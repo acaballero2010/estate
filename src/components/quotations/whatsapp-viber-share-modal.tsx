@@ -7,10 +7,10 @@ import {
   Copy,
   ExternalLink,
   Globe2,
+  Eye,
   MessageCircle,
   MessageSquare,
   Share2,
-  Sparkles,
 } from "lucide-react";
 import {
   CURRENCY_CONFIGS,
@@ -199,7 +199,7 @@ export function WhatsAppViberShareModal({
           {/* Live Mobile Chat Bubble Preview */}
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+              <Eye className="h-3.5 w-3.5 text-emerald-600" />
               Live Message Preview
             </Label>
             <div className="rounded-xl border bg-emerald-500/5 dark:bg-emerald-950/20 border-emerald-500/20 p-3.5 font-sans text-xs leading-relaxed space-y-1 text-foreground whitespace-pre-line max-h-56 overflow-y-auto shadow-inner">

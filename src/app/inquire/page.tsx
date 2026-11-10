@@ -14,6 +14,7 @@ import {
 import { CreateLeadInputSchema, type CreateLeadInput } from "@/lib/schemas";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { formatCurrency } from "@/lib/utils";
+import { SiteHeader } from "@/components/layout/site-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -92,8 +93,10 @@ export default function PublicLeadCapturePage() {
   };
 
   return (
-    <div className="container max-w-5xl py-8">
-      <div className="grid gap-6 lg:grid-cols-12 items-start">
+    <div className="min-h-screen bg-background text-foreground">
+      <SiteHeader />
+      <div className="container max-w-5xl py-8">
+        <div className="grid gap-6 lg:grid-cols-12 items-start">
         {/* Left Project Showcase (5 Cols) */}
         <div className="min-w-0 space-y-4 lg:col-span-5">
           <Badge variant="new" className="gap-1 text-xs">
@@ -275,6 +278,7 @@ export default function PublicLeadCapturePage() {
         </div>
       </div>
     </div>
+  </div>
   );
 }
 

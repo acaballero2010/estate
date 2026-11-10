@@ -67,6 +67,7 @@ function InboxContent() {
   const [showSnippets, setShowSnippets] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [shareModalOpen, setShareModalOpen] = React.useState(false);
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (queryLeadId) {
@@ -100,6 +101,10 @@ function InboxContent() {
         ),
     [messages, activeLead]
   );
+
+  React.useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [threadMessages.length, activeLeadId]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -487,6 +492,7 @@ function InboxContent() {
                   No messages in this thread yet. Choose a saved reply snippet below or attach a quotation sheet.
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Saved Reply Snippets Drawer */}

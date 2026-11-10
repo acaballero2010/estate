@@ -15,7 +15,7 @@ import {
   Radio,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
+  Zap,
   Trash2,
   Unplug,
 } from "lucide-react";
@@ -242,7 +242,7 @@ export function MessengerSettingsModal({
                 Webhook &amp; Routing
               </TabsTrigger>
               <TabsTrigger value="automations" className="text-xs gap-1.5">
-                <Sparkles className="h-3.5 w-3.5" />
+                <Zap className="h-3.5 w-3.5" />
                 Automations
               </TabsTrigger>
             </TabsList>
