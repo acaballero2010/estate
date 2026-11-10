@@ -87,14 +87,18 @@ interface StackingCell {
 }
 
 const DEFAULT_TOWER_FLOORS = [
-  { floor: 28, prefix: "28" },
-  { floor: 26, prefix: "26" },
-  { floor: 24, prefix: "24" },
-  { floor: 22, prefix: "22" },
-  { floor: 18, prefix: "18" },
-  { floor: 15, prefix: "15" },
-  { floor: 11, prefix: "11" },
-];
+  { floor: 42, prefix: "42", zone: "PENTHOUSE" },
+  { floor: 38, prefix: "38", zone: "HIGH" },
+  { floor: 32, prefix: "32", zone: "HIGH" },
+  { floor: 28, prefix: "28", zone: "HIGH" },
+  { floor: 26, prefix: "26", zone: "HIGH" },
+  { floor: 24, prefix: "24", zone: "MID" },
+  { floor: 22, prefix: "22", zone: "MID" },
+  { floor: 18, prefix: "18", zone: "MID" },
+  { floor: 15, prefix: "15", zone: "LOW" },
+  { floor: 11, prefix: "11", zone: "LOW" },
+  { floor: 6, prefix: "06", zone: "LOW" },
+] as const;
 
 export default function PropertiesPage() {
   const router = useRouter();
@@ -118,6 +122,8 @@ export default function PropertiesPage() {
   const [uploadedPhotoPreview, setUploadedPhotoPreview] = React.useState<string | null>(null);
   const [addGalleryUrlsText, setAddGalleryUrlsText] = React.useState<string>("");
   const [selectedStackCell, setSelectedStackCell] = React.useState<StackingCell | null>(null);
+  const [stackZoneFilter, setStackZoneFilter] = React.useState<"ALL" | "PENTHOUSE" | "HIGH" | "MID" | "LOW">("ALL");
+  const [stackStatusFilter, setStackStatusFilter] = React.useState<"ALL" | "AVAILABLE" | "RESERVED" | "SOLD">("ALL");
   const [selectedSocialProperty, setSelectedSocialProperty] = React.useState<Property | null>(null);
   const [isSocialModalOpen, setIsSocialModalOpen] = React.useState(false);
   const [portfolioView, setPortfolioView] = React.useState<"MY_LISTINGS" | "ACCREDITED" | "ALL">("MY_LISTINGS");
@@ -429,7 +435,12 @@ export default function PropertiesPage() {
 
   // Build Interactive Tower & Block-Lot Stacking Matrix combining live inventory + tower floors
   const stackingMatrix = React.useMemo(() => {
-    return DEFAULT_TOWER_FLOORS.map(({ floor, prefix }) => {
+    const activeFloors = DEFAULT_TOWER_FLOORS.filter((tf) => {
+      if (stackZoneFilter === "ALL") return true;
+      return tf.zone === stackZoneFilter;
+    });
+
+    return activeFloors.map(({ floor, prefix }) => {
       const slots = ["01", "02", "05", "08", "09"].map((suffix, idx) => {
         const unitCodeShort = `${prefix}${suffix}`;
         const matchedProp = properties.find((p) =>
@@ -482,7 +493,7 @@ export default function PropertiesPage() {
         slots,
       };
     });
-  }, [properties]);
+  }, [properties, stackZoneFilter]);
 
   const handleComputeFromStackCell = (cell: StackingCell) => {
     if (cell.linkedPropertyId) {
@@ -1399,8 +1410,61 @@ export default function PropertiesPage() {
                     </CardDescription>
                   </div>
                   <Badge variant="outline" className="text-[10px] w-fit">
-                    35 Residential Units Mapped
+                    {stackingMatrix.length * 5} Units Mapped
                   </Badge>
+                </div>
+
+                {/* Stacking Plan Zone & Status Filter Controls */}
+                <div className="flex flex-wrap items-center justify-between gap-2.5 pt-3 border-t mt-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-muted-foreground mr-1">Tower Zone:</span>
+                    {(
+                      [
+                        { id: "ALL", label: "All Floors" },
+                        { id: "PENTHOUSE", label: "Penthouse (42F)" },
+                        { id: "HIGH", label: "High (26F-38F)" },
+                        { id: "MID", label: "Mid (18F-24F)" },
+                        { id: "LOW", label: "Low (6F-15F)" },
+                      ] as const
+                    ).map((z) => (
+                      <Button
+                        key={z.id}
+                        type="button"
+                        variant={stackZoneFilter === z.id ? "default" : "outline"}
+                        size="sm"
+                        className="h-6 text-[10px] px-2"
+                        onClick={() => setStackZoneFilter(z.id)}
+                      >
+                        {z.label}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-muted-foreground mr-1">Status:</span>
+                    {(
+                      [
+                        { id: "ALL", label: "All" },
+                        { id: "AVAILABLE", label: "Available" },
+                        { id: "RESERVED", label: "Reserved" },
+                        { id: "SOLD", label: "Sold" },
+                      ] as const
+                    ).map((s) => (
+                      <Button
+                        key={s.id}
+                        type="button"
+                        variant={stackStatusFilter === s.id ? "secondary" : "ghost"}
+                        size="sm"
+                        className={cn(
+                          "h-6 text-[10px] px-2",
+                          stackStatusFilter === s.id && "bg-muted font-bold text-foreground border border-border"
+                        )}
+                        onClick={() => setStackStatusFilter(s.id)}
+                      >
+                        {s.label}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               </CardHeader>
 
@@ -1417,6 +1481,9 @@ export default function PropertiesPage() {
                       {row.slots.map((cell) => {
                         const isSelected =
                           selectedStackCell?.unitNumber === cell.unitNumber;
+                        const matchesStatus =
+                          stackStatusFilter === "ALL" ||
+                          cell.status === stackStatusFilter;
                         return (
                           <button
                             key={cell.unitNumber}
@@ -1431,6 +1498,7 @@ export default function PropertiesPage() {
                                 "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20",
                               cell.status === "SOLD" &&
                                 "border-slate-300 bg-slate-100 opacity-70 dark:border-slate-700 dark:bg-slate-800",
+                              !matchesStatus && "opacity-25 grayscale-[30%]",
                               isSelected && "ring-2 ring-primary ring-offset-1"
                             )}
                           >

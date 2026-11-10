@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   Calculator,
   CalendarCheck,
+  CheckCircle2,
   FileCheck2,
   Film,
   Flame,
@@ -172,6 +173,42 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Live Active Deal Milestone Alert */}
+      {deals[0] && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-pipeline-won/30 bg-pipeline-won/10 p-3.5 sm:px-4 text-xs shadow-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-pipeline-won/20 text-pipeline-won font-bold">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-foreground truncate">
+                  Latest Reservation: {deals[0].dealNumber}
+                </span>
+                <Badge variant="won" className="text-[9px] uppercase px-1.5 py-0">
+                  {deals[0].stage.replace(/_/g, " ")}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground truncate">
+                {(() => {
+                  const deal = deals[0];
+                  if (!deal) return "";
+                  const b = leads.find((l) => l.id === deal.leadId);
+                  const p = properties.find((prop) => prop.id === deal.propertyId);
+                  return `${b ? `${b.firstName} ${b.lastName}` : "Buyer"} reserved ${p?.projectName || "Unit"} (${p?.unitCode || ""}) • TCP: ${formatCurrency(deal.totalContractPrice)}`;
+                })()}
+              </p>
+            </div>
+          </div>
+          <Button size="sm" className="h-7 text-xs gap-1.5 bg-pipeline-won hover:bg-pipeline-won/90 text-white shrink-0" asChild>
+            <Link href="/deals">
+              <span>Open Deal Room</span>
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </Button>
+        </div>
+      )}
 
       {/* Priority Buyer Follow-Up Action Queue */}
       <Card>

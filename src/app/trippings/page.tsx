@@ -13,6 +13,7 @@ import {
   ExternalLink,
   MapPin,
   MessageSquare,
+  Navigation,
   Search,
   Share2,
   Trash2,
@@ -183,6 +184,18 @@ function TrippingsContent() {
     )}&location=${encodeURIComponent(trip.meetingPoint)}`;
   };
 
+  const getMapsUrl = (trip: TrippingScheduleItem) => {
+    const prop = properties.find((p) => p.id === trip.propertyId);
+    const query = `${prop?.projectName || ""} ${trip.meetingPoint} ${prop?.locationCity || ""}`.trim();
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+  };
+
+  const getWazeUrl = (trip: TrippingScheduleItem) => {
+    const prop = properties.find((p) => p.id === trip.propertyId);
+    const query = `${prop?.projectName || ""} ${trip.meetingPoint} ${prop?.locationCity || ""}`.trim();
+    return `https://waze.com/ul?q=${encodeURIComponent(query)}&navigate=yes`;
+  };
+
   const handleShareWhatsAppInvite = (trip: TrippingScheduleItem) => {
     const lead = leads.find((l) => l.id === trip.leadId);
     const prop = properties.find((p) => p.id === trip.propertyId);
@@ -190,8 +203,11 @@ function TrippingsContent() {
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
       (prop?.projectName || "") + " " + trip.meetingPoint
     )}`;
+    const wazeUrl = `https://waze.com/ul?q=${encodeURIComponent(
+      (prop?.projectName || "") + " " + trip.meetingPoint
+    )}&navigate=yes`;
 
-    const text = `🗓️ *Site Viewing Gate Pass Confirmation*\n\n🏢 *Project:* ${prop?.projectName || "Development"} (${prop?.unitCode || "Model Unit"})\n👤 *Buyer:* ${lead?.firstName || "Guest"} ${lead?.lastName || ""}\n📅 *Date & Time:* ${trip.scheduledDate} at ${trip.scheduledTime}\n📍 *Meeting Point:* ${trip.meetingPoint}\n\n🚗 *Parking & Access Notes:* ${trip.notes || "VIP Guest Access"}\n🗺️ *Google Maps Pin:* ${mapsUrl}\n\nLooking forward to touring the property with you!`;
+    const text = `🗓️ *Site Viewing Gate Pass Confirmation*\n\n🏢 *Project:* ${prop?.projectName || "Development"} (${prop?.unitCode || "Model Unit"})\n👤 *Buyer:* ${lead?.firstName || "Guest"} ${lead?.lastName || ""}\n📅 *Date & Time:* ${trip.scheduledDate} at ${trip.scheduledTime}\n📍 *Meeting Point:* ${trip.meetingPoint}\n\n🚗 *Parking & Access Notes:* ${trip.notes || "VIP Guest Access"}\n🗺️ *Google Maps Pin:* ${mapsUrl}\n🚙 *Waze Route:* ${wazeUrl}\n\nLooking forward to touring the property with you!`;
 
     navigator.clipboard.writeText(text);
     toast.success("Viewing confirmation copied! Ready to paste in WhatsApp, Viber, or Messenger.");
@@ -526,6 +542,40 @@ function TrippingsContent() {
                       >
                         <Share2 className="h-3 w-3" />
                         WhatsApp / Viber
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        asChild
+                      >
+                        <a
+                          href={getMapsUrl(trip)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open Destination in Google Maps"
+                        >
+                          <MapPin className="h-3 w-3 text-rose-500" />
+                          <span>Maps</span>
+                        </a>
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        asChild
+                      >
+                        <a
+                          href={getWazeUrl(trip)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open Turn-by-Turn Route in Waze"
+                        >
+                          <Navigation className="h-3 w-3 text-sky-500" />
+                          <span>Waze</span>
+                        </a>
                       </Button>
 
                       <Button
