@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import Papa from "papaparse";
 import {
   AlertCircle,
+  Bot,
   Calculator,
   CalendarCheck,
   Check,
@@ -36,6 +37,8 @@ import {
   Search,
   Send,
   ShieldCheck,
+  Smartphone,
+  Sparkles,
   Star,
   Target,
   Trash2,
@@ -58,12 +61,19 @@ import {
 import { uploadMediaFile } from "@/lib/firebase/storage-upload";
 import {
   calculateLeadReadiness,
+  evaluateLeadStaleness,
   type LeadReadinessAnalysis,
+  type LeadStalenessInfo,
 } from "@/lib/lead-scoring";
+import { useAutomationSettings } from "@/lib/hooks/use-automation-settings";
 import { useCrmStore } from "@/lib/store/crm-store";
+import { subscribeToAgentLeads } from "@/lib/firebase/firestore-sync";
 import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { BulkLeadImportModal } from "@/components/pipeline/bulk-lead-import-modal";
 import { ConvertLeadToDealModal } from "@/components/pipeline/convert-lead-to-deal-modal";
+import { SmartDripCampaignModal } from "@/components/pipeline/smart-drip-campaign-modal";
+import { SmsBroadcastModal } from "@/components/pipeline/sms-broadcast-modal";
+import { PullToRefreshContainer } from "@/components/ui/pull-to-refresh-container";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -139,10 +149,35 @@ export default function PipelinePage() {
     updateLeadDocumentStatus,
     deleteLeadDocument,
   } = useCrmStore();
+  const { staleLeadHours, enableAiCopilot, nowMs, hydrated } =
+    useAutomationSettings();
+
+  const syncLiveLeads = useCrmStore((s) => s.syncLiveLeads);
+  const activeAgentUid = useCrmStore((s) => s.activeAgentUid);
+
+  React.useEffect(() => {
+    if (!activeAgentUid || activeAgentUid === "demo-agent-marco" || activeAgentUid.startsWith("demo-")) return;
+
+    const unsubscribe = subscribeToAgentLeads(activeAgentUid, (liveLeads) => {
+      syncLiveLeads(liveLeads);
+    });
+
+    return () => unsubscribe();
+  }, [activeAgentUid, syncLiveLeads]);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [priorityFilter, setPriorityFilter] = React.useState<string>("ALL");
   const [onlyHotLeads, setOnlyHotLeads] = React.useState(false);
+  const [onlyOverdueLeads, setOnlyOverdueLeads] = React.useState(false);
   const [activeLead, setActiveLead] = React.useState<Lead | null>(null);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("overdue") === "true") {
+        setOnlyOverdueLeads(true);
+      }
+    }
+  }, []);
   const [draggedLeadId, setDraggedLeadId] = React.useState<string | null>(null);
   const [dragOverStage, setDragOverStage] =
     React.useState<PipelineStage | null>(null);
@@ -150,6 +185,8 @@ export default function PipelinePage() {
   const [isBulkOpen, setIsBulkOpen] = React.useState(false);
   const [isConvertDealOpen, setIsConvertDealOpen] = React.useState(false);
   const [dealConversionLead, setDealConversionLead] = React.useState<Lead | null>(null);
+  const [dripModalLead, setDripModalLead] = React.useState<Lead | null>(null);
+  const [smsModalLead, setSmsModalLead] = React.useState<Lead | null>(null);
   const [noteDraft, setNoteDraft] = React.useState("");
 
   // Sync activeLead with store updates
@@ -173,6 +210,28 @@ export default function PipelinePage() {
     }
     return map;
   }, [leads, properties, quotations]);
+
+  // Precompute follow-up SLA staleness against Settings threshold
+  const { leadStalenessMap, overdueLeadCount } = React.useMemo(() => {
+    const map = new Map<string, LeadStalenessInfo>();
+    let overdue = 0;
+    if (hydrated && nowMs > 0) {
+      for (const lead of leads) {
+        const info = evaluateLeadStaleness(lead, staleLeadHours, nowMs);
+        map.set(lead.id, info);
+        if (info.isOverdue) overdue += 1;
+      }
+    }
+    return { leadStalenessMap: map, overdueLeadCount: overdue };
+  }, [leads, staleLeadHours, nowMs, hydrated]);
+
+  const selectedLeadStaleness = React.useMemo(() => {
+    if (!selectedLead || !hydrated || nowMs <= 0) return null;
+    return (
+      leadStalenessMap.get(selectedLead.id) ??
+      evaluateLeadStaleness(selectedLead, staleLeadHours, nowMs)
+    );
+  }, [selectedLead, leadStalenessMap, staleLeadHours, nowMs, hydrated]);
 
   // Selected lead's detailed analysis
   const selectedLeadAnalysis = React.useMemo(() => {
@@ -218,13 +277,11 @@ export default function PipelinePage() {
 
     const followUpMessage = `Hi ${selectedLead.firstName}! Good day.
 
-To facilitate your buyer accreditation and reservation file${
-      matchingQuote
+To facilitate your buyer accreditation and reservation file${matchingQuote
         ? ` for ${matchingQuote.calculationInput.projectName} (${matchingQuote.calculationInput.unitCode})`
         : ""
-    }, our compliance team needs the following remaining documentary requirement${
-      missingRequired.length > 1 ? "s" : ""
-    }:
+      }, our compliance team needs the following remaining documentary requirement${missingRequired.length > 1 ? "s" : ""
+      }:
 
 ${missingListText}
 
@@ -299,6 +356,10 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
       if (onlyHotLeads && analysis?.tier !== "HOT" && lead.priority !== "HOT") {
         return false;
       }
+      if (onlyOverdueLeads && hydrated) {
+        const staleness = leadStalenessMap.get(lead.id);
+        if (!staleness?.isOverdue) return false;
+      }
       const matchesPriority =
         priorityFilter === "ALL" || lead.priority === priorityFilter;
       const q = searchQuery.toLowerCase().trim();
@@ -314,7 +375,16 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
           locMatch)
       );
     });
-  }, [leads, searchQuery, priorityFilter, onlyHotLeads, leadReadinessMap]);
+  }, [
+    leads,
+    searchQuery,
+    priorityFilter,
+    onlyHotLeads,
+    onlyOverdueLeads,
+    hydrated,
+    leadReadinessMap,
+    leadStalenessMap,
+  ]);
 
   // Drag & Drop handlers with optimistic UI + Toast
   const handleDragStart = (e: React.DragEvent, leadId: string) => {
@@ -459,6 +529,11 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
     toast.success(`Exported ${filteredLeads.length} leads to CSV!`);
   };
 
+  const handlePullRefresh = React.useCallback(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    toast.success("Pipeline leads synced with Firestore");
+  }, []);
+
   return (
     <div className="flex flex-col h-full min-w-0 max-w-full overflow-x-hidden space-y-4 p-4 md:p-6">
       {/* Header & Controls */}
@@ -523,6 +598,36 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
             {onlyHotLeads && (
               <span className="ml-1 rounded-full bg-white/20 px-1.5 py-0.2 text-[10px] font-bold">
                 {filteredLeads.length}
+              </span>
+            )}
+          </Button>
+
+          {/* Overdue SLA Follow-Up Filter Toggle */}
+          <Button
+            type="button"
+            variant={onlyOverdueLeads ? "default" : "outline"}
+            size="sm"
+            className={cn(
+              "h-8 text-xs gap-1.5 transition-all",
+              onlyOverdueLeads
+                ? "bg-amber-600 hover:bg-amber-700 text-white shadow-sm ring-2 ring-amber-500/20"
+                : hydrated && overdueLeadCount > 0 && "border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+            )}
+            onClick={() => setOnlyOverdueLeads(!onlyOverdueLeads)}
+            title={`Filter active leads untouched for ≥ ${staleLeadHours} hours`}
+          >
+            <Clock className="h-3.5 w-3.5" />
+            <span>Overdue (&gt;{staleLeadHours}h)</span>
+            {hydrated && overdueLeadCount > 0 && (
+              <span
+                className={cn(
+                  "ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-bold tabular-nums",
+                  onlyOverdueLeads
+                    ? "bg-white/20 text-white"
+                    : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                )}
+              >
+                {overdueLeadCount}
               </span>
             )}
           </Button>
@@ -636,6 +741,29 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                   </div>
                 </div>
 
+                {/* Parkinson's Law: 1-tap fast preset chips to save ~24 keyboard inputs on mobile */}
+                <div className="flex flex-wrap items-center gap-1.5 -mt-1">
+                  <span className="text-[10px] text-muted-foreground mr-0.5">Quick fill:</span>
+                  {[
+                    { label: "₱3M - ₱6M", min: 3000000, max: 6000000 },
+                    { label: "₱6M - ₱12M", min: 6000000, max: 12000000 },
+                    { label: "₱12M - ₱25M", min: 12000000, max: 25000000 },
+                    { label: "₱25M+", min: 25000000, max: 60000000 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        form.setValue("budgetMin", preset.min, { shouldValidate: true });
+                        form.setValue("budgetMax", preset.max, { shouldValidate: true });
+                      }}
+                      className="rounded-md border border-input bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-foreground/80 hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="space-y-1">
                   <Label htmlFor="location">Preferred City / Estate</Label>
                   <Input
@@ -678,7 +806,8 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
       </div>
 
       {/* View Switcher: Kanban vs Compact Table */}
-      <Tabs defaultValue="kanban" className="flex-1 flex flex-col min-w-0">
+      <PullToRefreshContainer onRefresh={handlePullRefresh} className="flex-1 flex flex-col min-w-0">
+        <Tabs defaultValue="kanban" className="flex-1 flex flex-col min-w-0">
         <div className="flex items-center justify-between">
           <TabsList className="h-8">
             <TabsTrigger value="kanban" className="text-xs gap-1.5 h-6">
@@ -744,215 +873,260 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
 
                   {/* Cards Stack */}
                   <div className="flex flex-1 flex-col gap-2.5 min-h-[380px]">
-                    {stageLeads.map((lead) => (
-                      <Card
-                        key={lead.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, lead.id)}
-                        onClick={() => setActiveLead(lead)}
-                        className={cn(
-                          "group cursor-pointer border bg-card p-3 shadow-sm transition-all hover:border-primary/50 hover:shadow-md active:scale-[0.99]",
-                          draggedLeadId === lead.id && "opacity-40"
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <div>
-                              <h3 className="text-xs font-semibold leading-tight">
-                                {lead.firstName} {lead.lastName}
-                              </h3>
-                              <span className="text-[10px] text-muted-foreground">
-                                {lead.source.replace(/_/g, " ")}
+                    {stageLeads.map((lead) => {
+                      const cardStaleness = hydrated
+                        ? leadStalenessMap.get(lead.id)
+                        : undefined;
+                      return (
+                        <Card
+                          key={lead.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, lead.id)}
+                          onDragEnd={() => setDraggedLeadId(null)}
+                          onClick={() => setActiveLead(lead)}
+                          className={cn(
+                            "group cursor-grab active:cursor-grabbing border bg-card p-3 shadow-xs transition-all duration-200 ease-out",
+                            cardStaleness?.isOverdue &&
+                            (cardStaleness.severity === "CRITICAL"
+                              ? "border-l-2 border-l-rose-500"
+                              : "border-l-2 border-l-amber-500"),
+                            draggedLeadId === lead.id
+                              ? "scale-105 shadow-2xl ring-2 ring-primary/40 rotate-1 z-30 opacity-95 bg-card/95 backdrop-blur-xs"
+                              : "hover:border-primary/50 hover:shadow-md hover:scale-[1.01]"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              <div>
+                                <h3 className="text-xs font-semibold leading-tight">
+                                  {lead.firstName} {lead.lastName}
+                                </h3>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {lead.source.replace(/_/g, " ")}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div
+                              className="flex items-center gap-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {(() => {
+                                const analysis = leadReadinessMap.get(lead.id);
+                                if (!analysis) return null;
+                                return (
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "h-4 px-1.5 text-[9px] gap-0.5 font-semibold",
+                                      analysis.badgeClass
+                                    )}
+                                    title={`Qualification Score: ${analysis.totalScore}/100 • ${analysis.tierLabel}`}
+                                  >
+                                    {analysis.tier === "HOT" ? (
+                                      <Flame className="h-2.5 w-2.5 fill-current text-rose-500" />
+                                    ) : analysis.tier === "HIGH" ? (
+                                      <Star className="h-2.5 w-2.5 fill-current text-amber-500" />
+                                    ) : (
+                                      <TrendingUp className="h-2.5 w-2.5" />
+                                    )}
+                                    <span>{analysis.totalScore}</span>
+                                  </Badge>
+                                );
+                              })()}
+                              {lead.priority === "HOT" && (
+                                <Badge
+                                  variant="destructive"
+                                  className="h-4 px-1 text-[9px] gap-0.5"
+                                >
+                                  <Flame className="h-2.5 w-2.5" />
+                                  HOT
+                                </Badge>
+                              )}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                  >
+                                    <MoreHorizontal className="h-3.5 w-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuLabel className="text-xs">
+                                    Move Stage To
+                                  </DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  {KANBAN_STAGES.map((st) => (
+                                    <DropdownMenuItem
+                                      key={st}
+                                      disabled={st === lead.stage}
+                                      onClick={() =>
+                                        handleManualStageChange(lead, st)
+                                      }
+                                      className="text-xs"
+                                    >
+                                      {PIPELINE_STAGE_LABELS[st]}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+
+                          {/* Budget & Location */}
+                          <div className="mt-2.5 space-y-1 text-[11px]">
+                            <div className="flex items-center justify-between text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Wallet className="h-3 w-3 text-primary" />
+                                Budget:
+                              </span>
+                              <span className="font-semibold text-foreground tabular-nums">
+                                {formatCompactCurrency(lead.budgetMin)} –{" "}
+                                {formatCompactCurrency(lead.budgetMax)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-muted-foreground truncate">
+                              <MapPin className="h-3 w-3 shrink-0" />
+                              <span className="truncate">
+                                {lead.preferredLocations.join(", ")}
                               </span>
                             </div>
                           </div>
 
-                          <div
-                            className="flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {(() => {
-                              const analysis = leadReadinessMap.get(lead.id);
-                              if (!analysis) return null;
-                              return (
+                          {/* Tags & Quick Actions Footer */}
+                          <div className="mt-3 flex items-center justify-between border-t pt-2">
+                            <div className="flex flex-wrap gap-1">
+                              <Badge
+                                variant="outline"
+                                className="h-4 px-1.5 text-[9px] font-normal"
+                              >
+                                {lead.financingPreference}
+                              </Badge>
+                              {cardStaleness?.isOverdue && (
                                 <Badge
                                   variant="outline"
                                   className={cn(
                                     "h-4 px-1.5 text-[9px] gap-0.5 font-semibold",
-                                    analysis.badgeClass
+                                    cardStaleness.severity === "CRITICAL"
+                                      ? "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                                      : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
                                   )}
-                                  title={`Qualification Score: ${analysis.totalScore}/100 • ${analysis.tierLabel}`}
+                                  title={`Overdue follow-up: ${cardStaleness.hoursSinceContact}h since last contact (SLA: ${staleLeadHours}h)`}
                                 >
-                                  {analysis.tier === "HOT" ? (
-                                    <Flame className="h-2.5 w-2.5 fill-current text-rose-500" />
-                                  ) : analysis.tier === "HIGH" ? (
-                                    <Star className="h-2.5 w-2.5 fill-current text-amber-500" />
-                                  ) : (
-                                    <TrendingUp className="h-2.5 w-2.5" />
-                                  )}
-                                  <span>{analysis.totalScore}</span>
+                                  <Clock className="h-2.5 w-2.5" />
+                                  {cardStaleness.elapsedLabel}
                                 </Badge>
-                              );
-                            })()}
-                            {lead.priority === "HOT" && (
-                              <Badge
-                                variant="destructive"
-                                className="h-4 px-1 text-[9px] gap-0.5"
+                              )}
+                              {(() => {
+                                const requiredKyc = STANDARD_KYC_REQUIREMENTS.filter(
+                                  (r) => r.required
+                                );
+                                const verifiedCount = requiredKyc.filter((r) =>
+                                  lead.documents.some(
+                                    (d) =>
+                                      d.type === r.type &&
+                                      (d.verified || d.status === "VERIFIED")
+                                  )
+                                ).length;
+                                const uploadedCount = requiredKyc.filter((r) =>
+                                  lead.documents.some((d) => d.type === r.type)
+                                ).length;
+
+                                if (
+                                  verifiedCount === requiredKyc.length &&
+                                  requiredKyc.length > 0
+                                ) {
+                                  return (
+                                    <Badge
+                                      variant="won"
+                                      className="h-4 px-1.5 text-[9px] gap-0.5"
+                                      title="All required KYC documents verified"
+                                    >
+                                      <CheckCircle2 className="h-2.5 w-2.5" />
+                                      KYC Complete
+                                    </Badge>
+                                  );
+                                }
+                                if (uploadedCount > 0) {
+                                  return (
+                                    <Badge
+                                      variant="outline"
+                                      className="h-4 px-1.5 text-[9px] gap-0.5 border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                                      title={`${uploadedCount} of ${requiredKyc.length} required KYC documents submitted`}
+                                    >
+                                      KYC {uploadedCount}/{requiredKyc.length}
+                                    </Badge>
+                                  );
+                                }
+                                if (
+                                  lead.stage === "PROPOSAL_SENT" ||
+                                  lead.stage === "RESERVATION"
+                                ) {
+                                  return (
+                                    <Badge
+                                      variant="outline"
+                                      className="h-4 px-1.5 text-[9px] gap-0.5 border-rose-500/40 text-rose-700 dark:text-rose-400 bg-rose-500/10"
+                                      title="No KYC documents uploaded yet"
+                                    >
+                                      KYC Missing
+                                    </Badge>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
+                            <div
+                              className="flex items-center gap-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                asChild
+                                title="Open in Messenger Hub"
                               >
-                                <Flame className="h-2.5 w-2.5" />
-                                HOT
-                              </Badge>
-                            )}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6"
-                                >
-                                  <MoreHorizontal className="h-3.5 w-3.5" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel className="text-xs">
-                                  Move Stage To
-                                </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                {KANBAN_STAGES.map((st) => (
-                                  <DropdownMenuItem
-                                    key={st}
-                                    disabled={st === lead.stage}
-                                    onClick={() =>
-                                      handleManualStageChange(lead, st)
-                                    }
-                                    className="text-xs"
-                                  >
-                                    {PIPELINE_STAGE_LABELS[st]}
-                                  </DropdownMenuItem>
-                                ))}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                <Link href={`/inbox?leadId=${lead.id}`}>
+                                  <MessageSquare className="h-3.5 w-3.5" />
+                                </Link>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                asChild
+                                title="Create Quotation"
+                              >
+                                <Link href={`/quotations?leadId=${lead.id}`}>
+                                  <Calculator className="h-3.5 w-3.5" />
+                                </Link>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-amber-500"
+                                onClick={() => setDripModalLead(lead)}
+                                title="Assign Smart Drip Action Plan"
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground hover:text-emerald-600"
+                                onClick={() => setSmsModalLead(lead)}
+                                title="Send Direct Philippine SMS (Semaphore)"
+                              >
+                                <Smartphone className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-
-                        {/* Budget & Location */}
-                        <div className="mt-2.5 space-y-1 text-[11px]">
-                          <div className="flex items-center justify-between text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Wallet className="h-3 w-3 text-primary" />
-                              Budget:
-                            </span>
-                            <span className="font-semibold text-foreground tabular-nums">
-                              {formatCompactCurrency(lead.budgetMin)} –{" "}
-                              {formatCompactCurrency(lead.budgetMax)}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1 text-muted-foreground truncate">
-                            <MapPin className="h-3 w-3 shrink-0" />
-                            <span className="truncate">
-                              {lead.preferredLocations.join(", ")}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Tags & Quick Actions Footer */}
-                        <div className="mt-3 flex items-center justify-between border-t pt-2">
-                          <div className="flex flex-wrap gap-1">
-                            <Badge
-                              variant="outline"
-                              className="h-4 px-1.5 text-[9px] font-normal"
-                            >
-                              {lead.financingPreference}
-                            </Badge>
-                            {(() => {
-                              const requiredKyc = STANDARD_KYC_REQUIREMENTS.filter(
-                                (r) => r.required
-                              );
-                              const verifiedCount = requiredKyc.filter((r) =>
-                                lead.documents.some(
-                                  (d) =>
-                                    d.type === r.type &&
-                                    (d.verified || d.status === "VERIFIED")
-                                )
-                              ).length;
-                              const uploadedCount = requiredKyc.filter((r) =>
-                                lead.documents.some((d) => d.type === r.type)
-                              ).length;
-
-                              if (
-                                verifiedCount === requiredKyc.length &&
-                                requiredKyc.length > 0
-                              ) {
-                                return (
-                                  <Badge
-                                    variant="won"
-                                    className="h-4 px-1.5 text-[9px] gap-0.5"
-                                    title="All required KYC documents verified"
-                                  >
-                                    <CheckCircle2 className="h-2.5 w-2.5" />
-                                    KYC Complete
-                                  </Badge>
-                                );
-                              }
-                              if (uploadedCount > 0) {
-                                return (
-                                  <Badge
-                                    variant="outline"
-                                    className="h-4 px-1.5 text-[9px] gap-0.5 border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10"
-                                    title={`${uploadedCount} of ${requiredKyc.length} required KYC documents submitted`}
-                                  >
-                                    KYC {uploadedCount}/{requiredKyc.length}
-                                  </Badge>
-                                );
-                              }
-                              if (
-                                lead.stage === "PROPOSAL_SENT" ||
-                                lead.stage === "RESERVATION"
-                              ) {
-                                return (
-                                  <Badge
-                                    variant="outline"
-                                    className="h-4 px-1.5 text-[9px] gap-0.5 border-rose-500/40 text-rose-700 dark:text-rose-400 bg-rose-500/10"
-                                    title="No KYC documents uploaded yet"
-                                  >
-                                    KYC Missing
-                                  </Badge>
-                                );
-                              }
-                              return null;
-                            })()}
-                          </div>
-                          <div
-                            className="flex items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-primary"
-                              asChild
-                              title="Open in Messenger Hub"
-                            >
-                              <Link href={`/inbox?leadId=${lead.id}`}>
-                                <MessageSquare className="h-3.5 w-3.5" />
-                              </Link>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-muted-foreground hover:text-primary"
-                              asChild
-                              title="Create Quotation"
-                            >
-                              <Link href={`/quotations?leadId=${lead.id}`}>
-                                <Calculator className="h-3.5 w-3.5" />
-                              </Link>
-                            </Button>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
+                        </Card>
+                      );
+                    })}
 
                     {stageLeads.length === 0 && (
                       <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
@@ -1087,6 +1261,16 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                       onClick={(e) => e.stopPropagation()}
                     >
                       <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs px-2 gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                          onClick={() => setSmsModalLead(lead)}
+                          title="Send Philippine SMS"
+                        >
+                          <Smartphone className="h-3 w-3" />
+                          <span className="hidden sm:inline">SMS</span>
+                        </Button>
                         <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
                           <Link href={`/inbox?leadId=${lead.id}`}>Chat</Link>
                         </Button>
@@ -1104,6 +1288,7 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
           </Card>
         </TabsContent>
       </Tabs>
+    </PullToRefreshContainer>
 
       {/* LEAD DETAIL DRAWER (SHEET) */}
       <Sheet
@@ -1129,7 +1314,98 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                   {selectedLead.phone} •{" "}
                   {selectedLead.email || "No email provided"}
                 </SheetDescription>
+                <div className="flex flex-wrap items-center gap-1.5 pt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                    onClick={() => setSmsModalLead(selectedLead)}
+                  >
+                    <Smartphone className="h-3.5 w-3.5" />
+                    Direct SMS
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" asChild>
+                    <Link href={`/inbox?leadId=${selectedLead.id}`}>
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Messenger
+                    </Link>
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" asChild>
+                    <Link href={`/quotations?leadId=${selectedLead.id}`}>
+                      <Calculator className="h-3.5 w-3.5" />
+                      Proposal
+                    </Link>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                    onClick={() => setDripModalLead(selectedLead)}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Drip Plan
+                  </Button>
+                </div>
               </SheetHeader>
+
+              {/* Overdue Follow-Up SLA Alert Banner */}
+              {selectedLeadStaleness?.isOverdue && (
+                <div
+                  className={cn(
+                    "rounded-xl border p-3 text-xs space-y-2",
+                    selectedLeadStaleness.severity === "CRITICAL"
+                      ? "border-rose-500/40 bg-rose-500/10"
+                      : "border-amber-500/40 bg-amber-500/10"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2">
+                      <Clock
+                        className={cn(
+                          "h-4 w-4 shrink-0 mt-0.5",
+                          selectedLeadStaleness.severity === "CRITICAL"
+                            ? "text-rose-600 dark:text-rose-400"
+                            : "text-amber-600 dark:text-amber-400"
+                        )}
+                      />
+                      <div>
+                        <p className="font-bold text-foreground">
+                          Follow-Up Overdue ({selectedLeadStaleness.elapsedLabel} since last contact)
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Exceeds your {staleLeadHours}h stale-lead SLA threshold. Reach out now to protect deal velocity.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {enableAiCopilot && (
+                      <Button size="sm" className="h-7 text-[11px] gap-1.5" asChild>
+                        <Link href={`/inbox?leadId=${selectedLead.id}&checkIn=true`}>
+                          <Bot className="h-3.5 w-3.5" />
+                          Draft AI Check-In
+                        </Link>
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] gap-1.5 bg-background"
+                      onClick={() => {
+                        addLeadNote(
+                          selectedLead.id,
+                          `Logged follow-up touchpoint (cleared ${selectedLeadStaleness.elapsedLabel} SLA alert).`
+                        );
+                        toast.success("Follow-up logged! Lead SLA timer reset.");
+                      }}
+                    >
+                      <Check className="h-3.5 w-3.5 text-pipeline-won" />
+                      Mark Contacted Now
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Quick Stage Switcher */}
               <div className="space-y-1.5">
@@ -1487,16 +1763,15 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                             selectedLeadKyc?.progressPct === 100
                               ? "won"
                               : selectedLeadKyc?.uploadedCount && selectedLeadKyc.uploadedCount > 0
-                              ? "secondary"
-                              : "destructive"
+                                ? "secondary"
+                                : "destructive"
                           }
                           className="text-[9px] h-4 px-1.5"
                         >
                           {selectedLeadKyc?.progressPct === 100
                             ? "Complete ✓"
-                            : `${selectedLeadKyc?.verifiedCount || 0}/${
-                                selectedLeadKyc?.requiredList.length || 0
-                              } Verified`}
+                            : `${selectedLeadKyc?.verifiedCount || 0}/${selectedLeadKyc?.requiredList.length || 0
+                            } Verified`}
                         </Badge>
                       </Label>
                       <p className="text-[10px] text-muted-foreground">
@@ -1544,8 +1819,8 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                           selectedLeadKyc.progressPct === 100
                             ? "bg-emerald-600"
                             : selectedLeadKyc.progressPct > 0
-                            ? "bg-amber-500"
-                            : "bg-destructive"
+                              ? "bg-amber-500"
+                              : "bg-destructive"
                         )}
                         style={{ width: `${selectedLeadKyc.progressPct}%` }}
                       />
@@ -1632,10 +1907,10 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                           isVerified
                             ? "border-emerald-500/30 bg-emerald-500/5"
                             : isRejected
-                            ? "border-destructive/30 bg-destructive/5"
-                            : isPending
-                            ? "border-amber-500/30 bg-amber-500/5"
-                            : "border-border bg-card"
+                              ? "border-destructive/30 bg-destructive/5"
+                              : isPending
+                                ? "border-amber-500/30 bg-amber-500/5"
+                                : "border-border bg-card"
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -1663,24 +1938,24 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                                 isVerified
                                   ? "won"
                                   : isRejected
-                                  ? "destructive"
-                                  : isPending
-                                  ? "outline"
-                                  : req.required
-                                  ? "destructive"
-                                  : "secondary"
+                                    ? "destructive"
+                                    : isPending
+                                      ? "outline"
+                                      : req.required
+                                        ? "destructive"
+                                        : "secondary"
                               }
                               className="text-[9px] h-4 px-1.5"
                             >
                               {isVerified
                                 ? "Verified ✓"
                                 : isRejected
-                                ? "Rejected"
-                                : isPending
-                                ? "Needs Review"
-                                : req.required
-                                ? "Missing"
-                                : "Optional"}
+                                  ? "Rejected"
+                                  : isPending
+                                    ? "Needs Review"
+                                    : req.required
+                                      ? "Missing"
+                                      : "Optional"}
                             </Badge>
                           </div>
                         </div>
@@ -1885,52 +2160,52 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
                 {selectedLead.documents.some(
                   (d) => !STANDARD_KYC_REQUIREMENTS.some((r) => r.type === d.type)
                 ) && (
-                  <div className="space-y-1.5 pt-2 border-t">
-                    <Label className="text-[11px] font-semibold text-muted-foreground">
-                      Additional Uploaded Documents:
-                    </Label>
-                    {selectedLead.documents
-                      .filter(
-                        (d) => !STANDARD_KYC_REQUIREMENTS.some((r) => r.type === d.type)
-                      )
-                      .map((doc) => (
-                        <div
-                          key={doc.id}
-                          className="flex items-center justify-between rounded-md border bg-card p-2 text-xs"
-                        >
-                          <div className="flex items-center gap-2 truncate max-w-[200px]">
-                            <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
-                            <div className="truncate">
-                              <p className="font-medium truncate">{doc.name}</p>
-                              <p className="text-[9px] text-muted-foreground">
-                                {doc.type.replace(/_/g, " ")}
-                              </p>
+                    <div className="space-y-1.5 pt-2 border-t">
+                      <Label className="text-[11px] font-semibold text-muted-foreground">
+                        Additional Uploaded Documents:
+                      </Label>
+                      {selectedLead.documents
+                        .filter(
+                          (d) => !STANDARD_KYC_REQUIREMENTS.some((r) => r.type === d.type)
+                        )
+                        .map((doc) => (
+                          <div
+                            key={doc.id}
+                            className="flex items-center justify-between rounded-md border bg-card p-2 text-xs"
+                          >
+                            <div className="flex items-center gap-2 truncate max-w-[200px]">
+                              <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
+                              <div className="truncate">
+                                <p className="font-medium truncate">{doc.name}</p>
+                                <p className="text-[9px] text-muted-foreground">
+                                  {doc.type.replace(/_/g, " ")}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <a
+                                href={doc.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1">
+                                  <Eye className="h-2.5 w-2.5" />
+                                  View
+                                </Button>
+                              </a>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleDeleteDocument(doc.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <a
-                              href={doc.fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1">
-                                <Eye className="h-2.5 w-2.5" />
-                                View
-                              </Button>
-                            </a>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                              onClick={() => handleDeleteDocument(doc.id)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
+                        ))}
+                    </div>
+                  )}
               </div>
             </div>
           )}
@@ -1942,6 +2217,20 @@ Please let me know once uploaded so we can verify them promptly. Thank you!`;
         lead={dealConversionLead}
         isOpen={isConvertDealOpen}
         onClose={() => setIsConvertDealOpen(false)}
+      />
+
+      {/* Smart Drip Campaign Action Plans Modal */}
+      <SmartDripCampaignModal
+        lead={dripModalLead}
+        isOpen={!!dripModalLead}
+        onClose={() => setDripModalLead(null)}
+      />
+
+      {/* Headless Philippine SMS Gateway (Semaphore.co) Modal */}
+      <SmsBroadcastModal
+        lead={smsModalLead}
+        open={!!smsModalLead}
+        onOpenChange={(open) => !open && setSmsModalLead(null)}
       />
     </div>
   );

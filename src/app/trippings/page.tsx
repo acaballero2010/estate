@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
+  BellRing,
   CalendarCheck,
   CalendarPlus,
   CheckCircle2,
@@ -19,6 +20,7 @@ import {
   Trash2,
   User,
 } from "lucide-react";
+import { TrippingReminderModal } from "@/components/trippings/tripping-reminder-modal";
 import { useCrmStore } from "@/lib/store/crm-store";
 import type { TrippingScheduleItem } from "@/lib/schemas";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +71,20 @@ function TrippingsContent() {
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
   const [filterTab, setFilterTab] = React.useState<"ALL" | "UPCOMING" | "COMPLETED">("ALL");
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [reminderModalTrip, setReminderModalTrip] =
+    React.useState<TrippingScheduleItem | null>(null);
+
+  const upcoming24hTrippings = React.useMemo(() => {
+    const now = Date.now();
+    const in48h = now + 48 * 3600 * 1000;
+    return trippings.filter((t) => {
+      if (t.status === "COMPLETED" || t.status === "CANCELLED") return false;
+      const tripTime = new Date(
+        t.scheduledDate + "T" + (t.scheduledTime || "12:00")
+      ).getTime();
+      return tripTime >= now && tripTime <= in48h;
+    });
+  }, [trippings]);
 
   const [selectedLeadId, setSelectedLeadId] = React.useState<string>(
     initialLeadId || leads[0]?.id || ""
@@ -367,6 +383,42 @@ function TrippingsContent() {
         </Dialog>
       </div>
 
+      {/* 24-Hour Automated Tripping Follow-Up Alert Card */}
+      {upcoming24hTrippings.length > 0 && (
+        <div className="rounded-lg border border-border/80 border-l-4 border-l-amber-500 bg-card p-3.5 sm:p-4 text-xs shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="rounded-md bg-amber-500/10 p-2 text-amber-600 dark:text-amber-400 shrink-0">
+                <BellRing className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-foreground text-sm">
+                    Automated Viewing Follow-Up: {upcoming24hTrippings.length} Site Viewing{upcoming24hTrippings.length > 1 ? "s" : ""} Scheduled Soon
+                  </h3>
+                  <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] py-0 font-medium">
+                    Next 48 Hours
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  Confirm arrival directions, security gate visitor passes, and live navigation pins with prospective buyers to prevent no-shows.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-amber-600 hover:bg-amber-700 text-white shadow-xs font-medium"
+                onClick={() => setReminderModalTrip(upcoming24hTrippings[0] || null)}
+              >
+                <BellRing className="h-3.5 w-3.5" />
+                Dispatch Reminder ({upcoming24hTrippings[0]?.scheduledDate} @ {upcoming24hTrippings[0]?.scheduledTime})
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
         <Tabs
@@ -547,6 +599,17 @@ function TrippingsContent() {
                       <Button
                         variant="outline"
                         size="sm"
+                        className="h-7 text-xs gap-1 border-amber-500/30 text-amber-700 bg-amber-500/5 hover:bg-amber-500/15 dark:text-amber-400"
+                        onClick={() => setReminderModalTrip(trip)}
+                        title="Send 24-hour reminder with gate pass and map directions"
+                      >
+                        <BellRing className="h-3 w-3" />
+                        24h Reminder
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="h-7 text-xs gap-1"
                         asChild
                       >
@@ -642,6 +705,17 @@ function TrippingsContent() {
           })}
         </div>
       )}
+
+      {/* 24-Hour Tripping Reminder Dispatch Modal */}
+      <TrippingReminderModal
+        tripping={reminderModalTrip}
+        lead={leads.find((l) => l.id === reminderModalTrip?.leadId) || null}
+        property={
+          properties.find((p) => p.id === reminderModalTrip?.propertyId) || null
+        }
+        open={Boolean(reminderModalTrip)}
+        onOpenChange={(open) => !open && setReminderModalTrip(null)}
+      />
     </div>
   );
 }

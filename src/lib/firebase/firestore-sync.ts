@@ -4,7 +4,11 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  onSnapshot,
+  query,
   setDoc,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import { firestoreDb } from "./config";
@@ -140,15 +144,15 @@ export async function loadOrSeedAgentFirestoreWorkspace(
   const dealsCol = collection(firestoreDb, "agents", agentUid, "deals");
   const trippingsCol = collection(firestoreDb, "agents", agentUid, "trippings");
 
-  // Query all collections concurrently
+  // Query collections concurrently with bounds to prevent unbounded read amplification
   const [leadsSnap, propsSnap, msgsSnap, quotesSnap, dealsSnap, trippingsSnap] =
     await Promise.all([
-      getDocs(leadsCol),
-      getDocs(propsCol),
-      getDocs(msgsCol),
-      getDocs(quotesCol),
-      getDocs(dealsCol),
-      getDocs(trippingsCol),
+      getDocs(query(leadsCol, limit(150))),
+      getDocs(query(propsCol, limit(150))),
+      getDocs(query(msgsCol, limit(300))),
+      getDocs(query(quotesCol, limit(100))),
+      getDocs(query(dealsCol, limit(100))),
+      getDocs(query(trippingsCol, limit(100))),
     ]);
 
   const isDemoAgent =
@@ -358,5 +362,60 @@ export async function saveAgentMessengerSettings(
     console.warn("Firestore saveAgentMessengerSettings warning:", err);
   }
 }
+
+/**
+ * Real-time listener for incoming messages belonging to an agent or specific lead.
+ */
+export function subscribeToAgentMessages(
+  agentUid: string,
+  onUpdate: (messages: Message[]) => void,
+  leadId?: string
+): () => void {
+  const msgsCol = collection(firestoreDb, "agents", agentUid, "messages");
+  const q = leadId
+    ? query(msgsCol, where("leadId", "==", leadId), limit(100))
+    : query(msgsCol, limit(200));
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const msgs = snap.docs.map((d) =>
+        hydrateMessageDates(d.data() as Record<string, unknown>)
+      );
+      msgs.sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      onUpdate(msgs);
+    },
+    (err) => {
+      console.warn("Real-time message subscription warning:", err);
+    }
+  );
+}
+
+/**
+ * Real-time listener for agent leads updates.
+ */
+export function subscribeToAgentLeads(
+  agentUid: string,
+  onUpdate: (leads: Lead[]) => void
+): () => void {
+  const leadsCol = collection(firestoreDb, "agents", agentUid, "leads");
+  const q = query(leadsCol, limit(150));
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const leads = snap.docs.map((d) =>
+        hydrateLeadDates(d.data() as Record<string, unknown>)
+      );
+      onUpdate(leads);
+    },
+    (err) => {
+      console.warn("Real-time leads subscription warning:", err);
+    }
+  );
+}
+
 
 

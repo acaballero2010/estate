@@ -8,6 +8,7 @@ import {
   Bot,
   Calculator,
   CheckCheck,
+  Clock,
   FileSpreadsheet,
   Globe2,
   MapPin,
@@ -28,14 +29,28 @@ import {
   SAVED_REPLY_SNIPPETS,
   useCrmStore,
 } from "@/lib/store/crm-store";
+import { subscribeToAgentMessages } from "@/lib/firebase/firestore-sync";
 import { MessengerSettingsModal } from "@/components/inbox/messenger-settings-modal";
 import { WhatsAppViberShareModal } from "@/components/quotations/whatsapp-viber-share-modal";
 import { useAuth } from "@/lib/firebase/auth-context";
+import {
+  buildFollowUpCheckInDraft,
+  evaluateLeadStaleness,
+} from "@/lib/lead-scoring";
+import { useAutomationSettings } from "@/lib/hooks/use-automation-settings";
 import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -58,7 +73,7 @@ function InboxContent() {
     moveLeadStage,
     messengerSettings,
   } = useCrmStore();
-  const { agentProfile } = useAuth();
+  const { user, agentProfile } = useAuth();
 
   const [activeLeadId, setActiveLeadId] = React.useState<string>(
     queryLeadId || leads[0]?.id || ""
@@ -86,6 +101,37 @@ function InboxContent() {
     () => leads.find((l) => l.id === activeLeadId) ?? leads[0],
     [leads, activeLeadId]
   );
+
+  const syncLiveMessages = useCrmStore((s) => s.syncLiveMessages);
+  const activeAgentUid = useCrmStore((s) => s.activeAgentUid);
+
+  React.useEffect(() => {
+    const uid = activeAgentUid || agentProfile?.uid;
+    if (!uid || uid === "demo-agent-marco" || uid.startsWith("demo-")) return;
+
+    const unsubscribe = subscribeToAgentMessages(uid, (liveMsgs) => {
+      syncLiveMessages(liveMsgs);
+    });
+
+    return () => unsubscribe();
+  }, [activeAgentUid, agentProfile?.uid, syncLiveMessages]);
+
+  const { staleLeadHours, nowMs, hydrated } = useAutomationSettings();
+  const activeLeadStaleness = React.useMemo(() => {
+    if (!activeLead || !hydrated || nowMs <= 0) return null;
+    return evaluateLeadStaleness(activeLead, staleLeadHours, nowMs);
+  }, [activeLead, staleLeadHours, nowMs, hydrated]);
+
+  const checkInParam = searchParams.get("checkIn");
+  const lastAutoDraftKeyRef = React.useRef<string>("");
+  React.useEffect(() => {
+    if (checkInParam !== "true" || !activeLead) return;
+    const key = `${activeLead.id}:checkIn`;
+    if (lastAutoDraftKeyRef.current === key) return;
+    lastAutoDraftKeyRef.current = key;
+    setDraftText(buildFollowUpCheckInDraft(activeLead, properties));
+    toast.info(`AI Check-In draft prepared for ${activeLead.firstName} — review & send!`);
+  }, [checkInParam, activeLead, properties]);
 
   const isPageConnected = Boolean(
     messengerSettings?.isConnected && messengerSettings?.pageId
@@ -115,15 +161,19 @@ function InboxContent() {
     setShowSnippets(false);
 
     // If connected to Facebook Page and buyer has a PSID, dispatch to Meta Send API
-    if (activeLead.messengerPsid && isPageConnected && messengerSettings?.pageAccessToken) {
+    if (activeLead.messengerPsid && isPageConnected) {
       try {
+        const idToken = user ? await user.getIdToken() : "";
         void fetch("/api/messenger/send", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+          },
           body: JSON.stringify({
             recipientPsid: activeLead.messengerPsid,
             text: textToSend,
-            pageAccessToken: messengerSettings.pageAccessToken,
+            ...(messengerSettings?.pageAccessToken ? { pageAccessToken: messengerSettings.pageAccessToken } : {}),
           }),
         });
       } catch (err) {
@@ -211,6 +261,34 @@ function InboxContent() {
     );
   };
 
+  const handleSimulateNewBuyerInquiry = () => {
+    const sampleNewBuyers = [
+      {
+        name: "Andrea Santos",
+        msg: "Hi! Looking for a 2BR condo in BGC around 18M via bank financing. Can we schedule a viewing this weekend?",
+      },
+      {
+        name: "Kevin Uy",
+        msg: "Hello, interested in house and lot in Nuvali around 9.5M. Do you have RFO units?",
+      },
+      {
+        name: "Bea Morales",
+        msg: "Good day! Any 1BR unit in Cebu IT Park around 4.8M eligible for Pag-IBIG?",
+      },
+    ];
+    const picked =
+      sampleNewBuyers[Math.floor(Math.random() * sampleNewBuyers.length)] ??
+      sampleNewBuyers[0]!;
+    const uniquePsid = `psid_sim_${Date.now().toString().slice(-6)}`;
+    const result = receiveWebhookMessage(uniquePsid, picked.name, picked.msg);
+    setActiveLeadId(result.leadId);
+    toast.success(
+      result.autoReplied
+        ? `Auto-captured ${picked.name} & dispatched instant Messenger greeting!`
+        : `Auto-captured new FB Messenger lead: ${picked.name}!`
+    );
+  };
+
   return (
     <div className="flex h-[calc(100dvh-7.5rem)] md:h-[calc(100dvh-3.5rem)] w-full min-w-0 max-w-full flex-col md:flex-row overflow-hidden">
       {/* LEFT PANE: Conversations Thread List */}
@@ -256,16 +334,39 @@ function InboxContent() {
             >
               <Settings className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-[11px] px-2 gap-1"
-              onClick={handleSimulateIncomingWebhook}
-              title="Simulate Meta Graph API POST Webhook Event"
-            >
-              <Zap className="h-3 w-3 text-pipeline-proposal" />
-              <span className="hidden sm:inline">Simulate</span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px] px-2 gap-1"
+                  title="Simulate Meta Graph API POST Webhook Event"
+                >
+                  <Zap className="h-3 w-3 text-pipeline-proposal" />
+                  <span className="hidden sm:inline">Simulate</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuLabel className="text-[11px]">
+                  Messenger Webhook Simulator
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleSimulateNewBuyerInquiry}
+                  className="text-xs cursor-pointer"
+                >
+                  <Bot className="mr-2 h-3.5 w-3.5 text-primary" />
+                  New FB Ad Lead (+ Auto-Reply)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleSimulateIncomingWebhook}
+                  className="text-xs cursor-pointer"
+                >
+                  <MessageSquarePlus className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                  Buyer Reply on Active Thread
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -324,6 +425,21 @@ function InboxContent() {
                       <span className="h-1.5 w-1.5 rounded-full bg-pipeline-won" />
                       Messenger Active
                     </span>
+                    {activeLeadStaleness?.isOverdue && (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "h-4 px-1.5 text-[9px] gap-0.5 shrink-0",
+                          activeLeadStaleness.severity === "CRITICAL"
+                            ? "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                            : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                        )}
+                        title={`Overdue follow-up (${activeLeadStaleness.hoursSinceContact}h since last contact; SLA ${staleLeadHours}h)`}
+                      >
+                        <Clock className="h-2.5 w-2.5" />
+                        Overdue {activeLeadStaleness.elapsedLabel}
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-[11px] text-muted-foreground truncate">
                     PSID: {activeLead.messengerPsid || "Manual Lead"} •{" "}
@@ -333,6 +449,22 @@ function InboxContent() {
               </div>
 
               <div className="flex items-center gap-1.5">
+                {activeLeadStaleness?.isOverdue && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-7 text-xs gap-1 bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20"
+                    onClick={() => {
+                      setDraftText(buildFollowUpCheckInDraft(activeLead, properties));
+                      toast.info(`Drafted follow-up check-in for ${activeLead.firstName}`);
+                    }}
+                    title="Draft an AI follow-up check-in tailored to this lead's stage"
+                  >
+                    <Bot className="h-3.5 w-3.5" />
+                    <span className="hidden md:inline">Draft Check-In</span>
+                  </Button>
+                )}
                 {/* Mobile & Tablet Lead Context Sheet Trigger (<xl screens) */}
                 <Sheet>
                   <SheetTrigger asChild>

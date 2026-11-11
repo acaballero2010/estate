@@ -10,6 +10,7 @@ import Papa from "papaparse";
 import {
   Bath,
   BedDouble,
+  BellRing,
   Building2,
   Calculator,
   Car,
@@ -43,9 +44,11 @@ import {
 } from "@/lib/schemas";
 import { useAuth } from "@/lib/firebase/auth-context";
 import { uploadMediaFile } from "@/lib/firebase/storage-upload";
+import { findMatchingLeadsForProperty } from "@/lib/lead-scoring";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { SocialShareCardModal } from "@/components/marketing/social-share-card-modal";
 import { EditPropertyModal } from "@/components/properties/edit-property-modal";
+import { PropertyMatchAlertModal } from "@/components/properties/property-match-alert-modal";
 import { cn, formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { getSafePropertyImageUrl } from "@/lib/property-images";
 import { Badge } from "@/components/ui/badge";
@@ -105,6 +108,7 @@ export default function PropertiesPage() {
   const { user, agentProfile } = useAuth();
   const {
     properties,
+    leads,
     addProperty,
     bulkAddProperties,
     updateProperty,
@@ -126,8 +130,20 @@ export default function PropertiesPage() {
   const [stackStatusFilter, setStackStatusFilter] = React.useState<"ALL" | "AVAILABLE" | "RESERVED" | "SOLD">("ALL");
   const [selectedSocialProperty, setSelectedSocialProperty] = React.useState<Property | null>(null);
   const [isSocialModalOpen, setIsSocialModalOpen] = React.useState(false);
+  const [selectedMatchProperty, setSelectedMatchProperty] = React.useState<Property | null>(null);
+  const [isMatchAlertOpen, setIsMatchAlertOpen] = React.useState(false);
   const [portfolioView, setPortfolioView] = React.useState<"MY_LISTINGS" | "ACCREDITED" | "ALL">("MY_LISTINGS");
   const csvFileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const propertyMatchCountMap = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const prop of properties) {
+      if (prop.status === "AVAILABLE") {
+        map.set(prop.id, findMatchingLeadsForProperty(prop, leads).length);
+      }
+    }
+    return map;
+  }, [properties, leads]);
 
   // Determine which properties belong directly to this logged-in agent
   const myListedProperties = React.useMemo(() => {
@@ -284,9 +300,30 @@ export default function PropertiesPage() {
       galleryImages: safeGallery,
     });
     setPortfolioView("MY_LISTINGS");
-    toast.success(
-      `Added ${created.projectName} (${created.unitCode}) to your exclusive listings!`
-    );
+    const matchedBuyers =
+      created.status === "AVAILABLE"
+        ? findMatchingLeadsForProperty(created, leads)
+        : [];
+    if (matchedBuyers.length > 0 && !openQuoteAfterSave) {
+      toast.success(
+        `Added ${created.unitCode}! ${matchedBuyers.length} active buyer${
+          matchedBuyers.length > 1 ? "s match" : " matches"
+        } this unit.`,
+        {
+          action: {
+            label: `Notify ${matchedBuyers.length} Buyers`,
+            onClick: () => {
+              setSelectedMatchProperty(created);
+              setIsMatchAlertOpen(true);
+            },
+          },
+        }
+      );
+    } else {
+      toast.success(
+        `Added ${created.projectName} (${created.unitCode}) to your exclusive listings!`
+      );
+    }
     setIsAddOpen(false);
     setUploadedPhotoPreview(null);
     setAddGalleryUrlsText("");
@@ -303,7 +340,32 @@ export default function PropertiesPage() {
   };
 
   const handleSaveEdit = (propertyId: string, values: CreatePropertyInput) => {
+    const prevProp = properties.find((p) => p.id === propertyId);
     updateProperty(propertyId, values);
+    if (
+      prevProp &&
+      prevProp.status !== "AVAILABLE" &&
+      values.status === "AVAILABLE"
+    ) {
+      const updatedSnapshot: Property = { ...prevProp, ...values };
+      const matches = findMatchingLeadsForProperty(updatedSnapshot, leads);
+      if (matches.length > 0) {
+        toast.info(
+          `${values.unitCode} is back on market — ${matches.length} buyer${
+            matches.length > 1 ? "s match" : " matches"
+          }!`,
+          {
+            action: {
+              label: "Send Alert",
+              onClick: () => {
+                setSelectedMatchProperty(updatedSnapshot);
+                setIsMatchAlertOpen(true);
+              },
+            },
+          }
+        );
+      }
+    }
   };
 
   const handleDeleteProperty = (propertyId: string) => {
@@ -1346,45 +1408,72 @@ export default function PropertiesPage() {
                         </span>
                       </div>
                     </div>
+
+                    {prop.status === "AVAILABLE" &&
+                      (propertyMatchCountMap.get(prop.id) ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedMatchProperty(prop);
+                            setIsMatchAlertOpen(true);
+                          }}
+                          className="w-full flex items-center justify-between rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors"
+                        >
+                          <span className="flex items-center gap-1.5 truncate">
+                            <BellRing className="h-3.5 w-3.5 shrink-0" />
+                            <span>
+                              {propertyMatchCountMap.get(prop.id)} Matching Pipeline Buyer
+                              {propertyMatchCountMap.get(prop.id) === 1 ? "" : "s"}
+                            </span>
+                          </span>
+                          <span className="text-[10px] font-semibold shrink-0 ml-2">
+                            Send Alert →
+                          </span>
+                        </button>
+                      )}
                   </CardContent>
 
-                  <CardFooter className="grid grid-cols-4 gap-1.5 p-4 pt-0">
+                  <CardFooter className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-4 pt-0">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full text-[10px] px-1 gap-1"
+                      className="w-full h-8 sm:h-7 text-xs sm:text-[11px] px-2 gap-1.5"
                       asChild
                     >
                       <Link href={`/showcase?propertyId=${prop.id}`}>
-                        <Film className="h-3 w-3 text-primary shrink-0" />
-                        <span className="truncate">Media</span>
+                        <Film className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span>Media</span>
                       </Link>
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full text-[10px] px-1 gap-1 text-primary hover:text-primary"
+                      className="w-full h-8 sm:h-7 text-xs sm:text-[11px] px-2 gap-1.5 text-primary hover:text-primary"
                       onClick={() => {
                         setSelectedSocialProperty(prop);
                         setIsSocialModalOpen(true);
                       }}
                     >
-                      <Share2 className="h-3 w-3 shrink-0" />
-                      <span className="truncate">Social</span>
+                      <Share2 className="h-3.5 w-3.5 shrink-0" />
+                      <span>Social</span>
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full text-[10px] px-1 gap-1"
+                      className="w-full h-8 sm:h-7 text-xs sm:text-[11px] px-2 gap-1.5"
                       onClick={() => handleOpenEdit(prop)}
                     >
-                      <Pencil className="h-3 w-3 shrink-0 text-muted-foreground" />
-                      <span className="truncate">Edit</span>
+                      <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span>Edit</span>
                     </Button>
-                    <Button size="sm" className="w-full text-[10px] px-1 gap-1" asChild>
+                    <Button
+                      size="sm"
+                      className="w-full h-8 sm:h-7 text-xs sm:text-[11px] px-2 gap-1.5 bg-primary text-primary-foreground font-semibold"
+                      asChild
+                    >
                       <Link href={`/quotations?propertyId=${prop.id}`}>
-                        <Calculator className="h-3 w-3 shrink-0" />
-                        <span className="truncate">Quote</span>
+                        <Calculator className="h-3.5 w-3.5 shrink-0" />
+                        <span>Quote</span>
                       </Link>
                     </Button>
                   </CardFooter>
@@ -1686,6 +1775,16 @@ export default function PropertiesPage() {
         }}
         onSave={handleSaveEdit}
         onDelete={handleDeleteProperty}
+      />
+
+      {/* Smart Property Match Alert Modal */}
+      <PropertyMatchAlertModal
+        property={selectedMatchProperty}
+        open={isMatchAlertOpen}
+        onOpenChange={(open) => {
+          setIsMatchAlertOpen(open);
+          if (!open) setSelectedMatchProperty(null);
+        }}
       />
     </div>
   );

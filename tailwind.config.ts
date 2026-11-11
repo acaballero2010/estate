@@ -96,6 +96,13 @@ const config: Config = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      transitionTimingFunction: {
+        "ease-out-decel": "cubic-bezier(0.16, 1, 0.3, 1)",
+      },
+      transitionDuration: {
+        "350": "350ms",
+        "470": "470ms",
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },
@@ -109,11 +116,21 @@ const config: Config = {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.65" },
         },
+        "draw-circle": {
+          "0%": { strokeDashoffset: "150" },
+          "100%": { strokeDashoffset: "0" },
+        },
+        "draw-tick": {
+          "0%": { strokeDashoffset: "40" },
+          "100%": { strokeDashoffset: "0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "pulse-subtle": "pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "draw-circle": "draw-circle 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
+        "draw-tick": "draw-tick 270ms cubic-bezier(0.16, 1, 0.3, 1) 200ms forwards",
       },
     },
   },

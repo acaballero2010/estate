@@ -533,57 +533,62 @@ function ShowcaseStorefrontContent() {
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      {/* 1. AGENT CONTROL BAR (Rendered ONLY when agent is logged in AND not explicitly in client preview) */}
+      {/* 1. AGENT CONTROL BAR (Single row, responsive, no horizontal wrapping or cutoff) */}
       {isMounted && !isClientView && user && (
-        <div className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-2 border-b bg-slate-950 px-4 py-2 text-white shadow-md">
-          <div className="flex items-center gap-2">
+        <div className="sticky top-0 z-50 flex items-center justify-between gap-1.5 sm:gap-2 border-b bg-slate-950 px-3 sm:px-4 py-1.5 sm:py-2 text-white shadow-md overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <Badge variant="outline" className="border-emerald-500/40 text-emerald-300 text-[10px] bg-emerald-500/10 font-semibold gap-1">
-              <Presentation className="h-3 w-3" /> Sales Presentation Mode
+            <Badge variant="outline" className="border-emerald-500/40 text-emerald-300 text-[10px] bg-emerald-500/10 font-semibold gap-1 px-1.5 sm:px-2 py-0.5">
+              <Presentation className="h-3 w-3" />
+              <span className="hidden sm:inline">Sales Presentation Mode</span>
+              <span className="sm:hidden">Agent Mode</span>
             </Badge>
-            <span className="text-slate-300 text-xs hidden sm:inline">
+            <span className="text-slate-300 text-xs hidden lg:inline">
               Branded as: <strong>{agentProfile?.fullName || user.email}</strong>
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="h-7 text-xs text-slate-200 border-white/20 bg-white/5 hover:bg-white/15 gap-1.5"
+              className="h-6 sm:h-7 px-2 text-[11px] sm:text-xs text-slate-200 border-white/20 bg-white/5 hover:bg-white/15 gap-1 shrink-0"
               onClick={() => setIsAnalyticsModalOpen(true)}
             >
-              <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
-              <span>{analyticsSummary?.totalPageViews || 24} Views</span>
+              <BarChart3 className="h-3 w-3 text-emerald-400" />
+              <span>{analyticsSummary?.totalPageViews || 24}</span>
+              <span className="hidden sm:inline"> Views</span>
             </Button>
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="h-7 text-xs text-slate-200 border-white/20 bg-white/5 hover:bg-white/15"
+              className="h-6 sm:h-7 px-2 text-[11px] sm:text-xs text-slate-200 border-white/20 bg-white/5 hover:bg-white/15 gap-1 shrink-0"
               onClick={() => {
                 const url = new URL(window.location.href);
                 url.searchParams.set("view", "client");
                 window.location.href = url.toString();
               }}
             >
-              <Eye className="h-3.5 w-3.5 mr-1 text-primary" />
-              Preview Client View
+              <Eye className="h-3 w-3 text-primary" />
+              <span className="hidden sm:inline">Preview Client View</span>
+              <span className="sm:hidden">Preview</span>
             </Button>
             <Button
               type="button"
               size="sm"
-              className="h-7 text-xs bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5"
+              className="h-6 sm:h-7 px-2 sm:px-2.5 text-[11px] sm:text-xs bg-primary hover:bg-primary/90 text-primary-foreground gap-1 shrink-0"
               onClick={() => handleCopyShowcaseLink()}
             >
-              <Share2 className="h-3.5 w-3.5" />
-              <span>Share Showcase to Client</span>
+              <Share2 className="h-3 w-3" />
+              <span className="hidden sm:inline">Share Showcase</span>
+              <span className="sm:hidden">Share</span>
             </Button>
             <Link
               href="/dashboard"
-              className="text-xs text-slate-300 hover:text-white flex items-center gap-1 ml-2 font-medium"
+              className="text-[11px] sm:text-xs text-slate-300 hover:text-white flex items-center gap-0.5 ml-1 font-medium shrink-0"
             >
-              <span>Back to CRM</span>
+              <span className="hidden sm:inline">CRM</span>
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
@@ -604,39 +609,60 @@ function ShowcaseStorefrontContent() {
         </div>
       )}
 
-      {/* Verified Consultant Credibility Bar */}
+      {/* Verified Consultant Credibility Bar (Clean single-line mobile ergonomics with no broken wrapping) */}
       {isMounted && agentProfile?.fullName && (
-        <div className="border-b border-border/40 bg-muted/30 px-4 py-2">
-          <div className="container flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="border-b border-border/40 bg-muted/30 px-3 sm:px-4 py-1.5 sm:py-2">
+          <div className="container flex items-center justify-between gap-2 text-xs">
             <button
               type="button"
               onClick={() => setIsCredibilityModalOpen(true)}
-              className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-colors text-[11px] font-semibold"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition-colors text-[11px] font-semibold max-w-[62%] sm:max-w-none truncate"
               title="Click to view verified regulatory credentials"
             >
               {agentProfile.avatarUrl ? (
                 <img
                   src={agentProfile.avatarUrl}
                   alt={agentProfile.fullName || "Agent"}
-                  className="h-4 w-4 rounded-full object-cover"
+                  className="h-4 w-4 rounded-full object-cover shrink-0"
                 />
               ) : (
-                <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
               )}
-              <span>Accredited Consultant: {agentProfile.fullName}</span>
+              <span className="truncate">
+                <span className="hidden sm:inline">Accredited Consultant: </span>
+                {agentProfile.fullName}
+              </span>
               {agentProfile.prcLicenseNumber && (
-                <span className="text-[10px] text-muted-foreground font-mono">
+                <span className="text-[10px] text-muted-foreground font-mono hidden md:inline">
                   ({agentProfile.prcLicenseNumber})
                 </span>
               )}
-              <span className="text-[10px] underline opacity-80 ml-1">View Credentials</span>
+              <span className="text-[10px] underline opacity-80 shrink-0 hidden xs:inline">Credentials</span>
             </button>
 
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" asChild>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {agentProfile.phone && (
+                <Button
+                  size="sm"
+                  className="h-7 w-7 p-0 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full sm:w-auto sm:px-2.5 sm:rounded-md gap-1"
+                  asChild
+                >
+                  <a
+                    href={`https://wa.me/${agentProfile.phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hi ${agentProfile.fullName}, I'm browsing your property showcase catalog.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Chat on WhatsApp"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline text-xs">WhatsApp</span>
+                  </a>
+                </Button>
+              )}
+              <Button variant="outline" size="sm" className="h-7 text-xs px-2.5 gap-1 shadow-2xs" asChild>
                 <Link href="/inquire">
                   <CalendarCheck className="h-3.5 w-3.5 text-primary" />
-                  <span>Book Site Tripping</span>
+                  <span className="hidden xs:inline">Book </span>
+                  <span>Tripping</span>
                 </Link>
               </Button>
               {user && isClientView && (
@@ -644,14 +670,14 @@ function ShowcaseStorefrontContent() {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                  className="h-7 text-xs text-muted-foreground hover:text-foreground px-2"
                   onClick={() => {
                     const url = new URL(window.location.href);
                     url.searchParams.delete("view");
                     window.location.href = url.toString();
                   }}
                 >
-                  Exit Client View
+                  Exit
                 </Button>
               )}
             </div>
@@ -659,28 +685,28 @@ function ShowcaseStorefrontContent() {
         </div>
       )}
 
-      <div className="container space-y-6 py-6 flex-1">
-        {/* Hero Banner */}
-        <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/15 via-background to-secondary/40 p-6 sm:p-8">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-            <div className="max-w-2xl space-y-3">
+      <div className="container space-y-4 sm:space-y-6 py-4 sm:py-6 flex-1">
+        {/* Hero Banner (Streamlined for mobile viewports) */}
+        <div className="relative overflow-hidden rounded-xl sm:rounded-2xl border bg-gradient-to-br from-primary/15 via-background to-secondary/40 p-4 sm:p-6 md:p-8">
+          <div className="flex flex-col justify-between gap-3 sm:gap-4 md:flex-row md:items-start">
+            <div className="max-w-2xl space-y-2 sm:space-y-3">
               <div className="flex items-center gap-2 flex-wrap">
-                <Badge variant="new" className="gap-1.5 text-xs">
-                  <Film className="h-3.5 w-3.5" /> Interactive Property Showcase &amp; Virtual Tours
+                <Badge variant="new" className="gap-1.5 text-[11px] sm:text-xs">
+                  <Film className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Interactive Showcase &amp; Tours
                 </Badge>
-                <Badge variant="outline" className="text-xs bg-background/80 font-mono">
+                <Badge variant="outline" className="text-[11px] sm:text-xs bg-background/80 font-mono">
                   {filteredProperties.length} Units Available
                 </Badge>
               </div>
-              <h1 className="text-2xl font-serif font-normal tracking-tight text-foreground sm:text-3xl">
-                Explore Model Units, Architectural Photos &amp; Video Walkthroughs
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-serif font-normal tracking-tight text-foreground leading-snug">
+                Explore Model Units, Architectural Photos &amp; Walkthroughs
               </h1>
-              <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                Tour our accredited Condominiums, Executive Villages, and Townhomes in high-definition. Inspect interactive room hotspots, watch walkthrough videos, and simulate instant monthly equity computations.
+              <p className="text-xs leading-relaxed text-muted-foreground sm:text-sm line-clamp-2 sm:line-clamp-none">
+                Tour accredited Condominiums, Executive Villages, and Townhomes in high-definition. Inspect interactive room hotspots, watch walkthrough videos, and simulate instant monthly equity computations.
               </p>
             </div>
 
-            <div className="flex items-center gap-2 self-start">
+            <div className="hidden sm:flex items-center gap-2 self-start">
               {!isClientView ? (
                 <Button
                   variant="outline"
@@ -696,7 +722,7 @@ function ShowcaseStorefrontContent() {
                   ) : (
                     <>
                       <Copy className="h-3.5 w-3.5 text-primary" />
-                      <span>Share Showcase to Client</span>
+                      <span>Share Showcase</span>
                     </>
                   )}
                 </Button>
@@ -715,17 +741,17 @@ function ShowcaseStorefrontContent() {
             </div>
           </div>
 
-        {/* Currency Switcher for Overseas & OFW Buyers */}
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-          <div className="flex items-center gap-2">
-            <Globe2 className="h-4 w-4 text-primary" />
+        {/* Currency Switcher for Overseas & OFW Buyers (Law 01 Closure: swipeable strip with peeking affordance) */}
+        <div className="mt-3.5 sm:mt-5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 border-t pt-3 sm:pt-4">
+          <div className="flex items-center gap-1.5">
+            <Globe2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary shrink-0" />
             <span className="text-xs font-semibold">Display Currency:</span>
-            <span className="text-[11px] text-muted-foreground hidden sm:inline">
+            <span className="text-[11px] text-muted-foreground hidden md:inline">
               Indicative conversion for OFWs and international investors
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 -mx-2 px-2 sm:mx-0 sm:px-0 sm:flex-wrap">
             {(Object.keys(CURRENCY_CONFIGS) as SupportedCurrency[]).map((curr) => {
               const conf = CURRENCY_CONFIGS[curr];
               const isSelected = selectedCurrency === curr;
@@ -735,7 +761,7 @@ function ShowcaseStorefrontContent() {
                   type="button"
                   size="sm"
                   variant={isSelected ? "default" : "outline"}
-                  className="h-7 px-2 text-xs gap-1"
+                  className="h-7 px-2.5 text-xs gap-1 shrink-0 shadow-2xs"
                   onClick={() => setSelectedCurrency(curr)}
                 >
                   <span>{conf.flag}</span>
@@ -751,16 +777,16 @@ function ShowcaseStorefrontContent() {
           </div>
         </div>
 
-        {/* Search & Filter Bar */}
-        <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-12">
+        {/* Search & Filter Bar (Compact 2-row layout on mobile instead of 4 stacked vertical rows) */}
+        <div className="mt-3 sm:mt-4 grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-2.5">
           {/* Keyword Search */}
           <div className="relative sm:col-span-5">
             <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by estate, developer, city, or unit..."
-              className="h-8 pl-8 pr-8 text-xs bg-background shadow-sm"
+              placeholder="Search estate, developer, city..."
+              className="h-8 pl-8 pr-8 text-xs bg-background shadow-2xs"
             />
             {searchQuery && (
               <button
@@ -773,54 +799,57 @@ function ShowcaseStorefrontContent() {
             )}
           </div>
 
-          {/* Category Filter */}
-          <div className="sm:col-span-3">
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none"
-            >
-              <option value="ALL">All Property Categories</option>
-              <option value="CONDOMINIUM">Condominiums</option>
-              <option value="HOUSE_AND_LOT">House &amp; Lot</option>
-              <option value="TOWNHOUSE">Townhomes</option>
-              <option value="RESIDENTIAL_LOT">Residential Lots</option>
-              <option value="COMMERCIAL_UNIT">Commercial Units</option>
-            </select>
-          </div>
+          {/* Filters 3-column subgrid on mobile */}
+          <div className="grid grid-cols-3 sm:col-span-7 gap-1.5 sm:gap-2">
+            {/* Category Filter */}
+            <div>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-[11px] sm:text-xs font-medium shadow-2xs focus:outline-none truncate"
+              >
+                <option value="ALL">All Types</option>
+                <option value="CONDOMINIUM">Condo</option>
+                <option value="HOUSE_AND_LOT">House &amp; Lot</option>
+                <option value="TOWNHOUSE">Townhouse</option>
+                <option value="RESIDENTIAL_LOT">Lot Only</option>
+                <option value="COMMERCIAL_UNIT">Commercial</option>
+              </select>
+            </div>
 
-          {/* Turnover Status */}
-          <div className="sm:col-span-2">
-            <select
-              value={turnoverFilter}
-              onChange={(e) => setTurnoverFilter(e.target.value)}
-              className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none"
-            >
-              <option value="ALL">All Turnover Dates</option>
-              <option value="RFO">Ready for Occupancy (RFO)</option>
-              <option value="PRE_SELLING">Pre-selling</option>
-            </select>
-          </div>
+            {/* Turnover Status */}
+            <div>
+              <select
+                value={turnoverFilter}
+                onChange={(e) => setTurnoverFilter(e.target.value)}
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-[11px] sm:text-xs font-medium shadow-2xs focus:outline-none truncate"
+              >
+                <option value="ALL">All Turnovers</option>
+                <option value="RFO">RFO Only</option>
+                <option value="PRE_SELLING">Pre-selling</option>
+              </select>
+            </div>
 
-          {/* Sorting */}
-          <div className="sm:col-span-2">
-            <select
-              value={sortOption}
-              onChange={(e) => setSortOption(e.target.value)}
-              className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-xs font-medium shadow-sm focus:outline-none"
-            >
-              <option value="FEATURED">Featured Developments</option>
-              <option value="PRICE_ASC">Price: Low to High</option>
-              <option value="PRICE_DESC">Price: High to Low</option>
-              <option value="AREA_DESC">Floor Area: Largest</option>
-            </select>
+            {/* Sorting */}
+            <div>
+              <select
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value)}
+                className="h-8 w-full rounded-md border border-input bg-background px-2 text-[11px] sm:text-xs font-medium shadow-2xs focus:outline-none truncate"
+              >
+                <option value="FEATURED">Featured</option>
+                <option value="PRICE_ASC">Price: Low</option>
+                <option value="PRICE_DESC">Price: High</option>
+                <option value="AREA_DESC">Largest</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Verified Consultant Credibility Banner */}
+      {/* Verified Consultant Credibility Banner (Rendered on tablet/desktop; on mobile the top credibility bar handles verification without pushing properties down) */}
       {isMounted && agentProfile && (
-        <div className="rounded-xl border bg-card p-4 sm:p-5 shadow-sm">
+        <div className="hidden sm:block rounded-xl border bg-card p-4 sm:p-5 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start sm:items-center gap-3.5">
               <div className="relative shrink-0">

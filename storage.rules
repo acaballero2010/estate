@@ -2,44 +2,70 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Agent avatars & credibility seals: public read, write with max 5MB
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function isDocumentOrImage() {
+      return request.resource.contentType.matches('image/.*') ||
+             request.resource.contentType == 'application/pdf';
+    }
+
+    // Agent avatars & credibility seals: public read, write by authenticated agent (max 5MB, images only)
     match /avatars/{allPaths=**} {
       allow read: if true;
-      allow write: if request.resource.size < 5 * 1024 * 1024;
+      allow write: if isAuthenticated() &&
+                      request.resource.size < 5 * 1024 * 1024 &&
+                      isImage();
     }
 
     match /badges/{allPaths=**} {
       allow read: if true;
-      allow write: if request.resource.size < 5 * 1024 * 1024;
+      allow write: if isAuthenticated() &&
+                      request.resource.size < 5 * 1024 * 1024 &&
+                      isImage();
     }
 
-    // Property photos & video walkthroughs: public read, write with max 25MB
+    // Property photos & video walkthroughs: public read, write by authenticated agent
     match /properties/{allPaths=**} {
       allow read: if true;
-      allow write: if request.resource.size < 25 * 1024 * 1024;
+      allow write: if isAuthenticated() &&
+                      request.resource.size < 25 * 1024 * 1024 &&
+                      isImage();
     }
 
     match /walkthroughs/{allPaths=**} {
       allow read: if true;
-      allow write: if request.resource.size < 100 * 1024 * 1024;
+      allow write: if isAuthenticated() &&
+                      request.resource.size < 100 * 1024 * 1024 &&
+                      (request.resource.contentType.matches('video/.*') || isImage());
     }
 
-    // Buyer reservation receipts: readable by agents, writable by buyers/agents (max 10MB)
+    // Buyer reservation receipts: readable only by authenticated agents, max 10MB
     match /receipts/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.resource.size < 10 * 1024 * 1024;
+      allow read: if isAuthenticated();
+      allow write: if request.resource.size < 10 * 1024 * 1024 &&
+                      isDocumentOrImage();
     }
 
-    // KYC compliance documents: readable by agents, writable by buyers/agents (max 15MB)
+    // KYC compliance documents: readable only by authenticated agents, max 15MB
     match /kyc/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.resource.size < 15 * 1024 * 1024;
+      allow read: if isAuthenticated();
+      allow write: if request.resource.size < 15 * 1024 * 1024 &&
+                      isDocumentOrImage();
     }
 
-    // Quotation PDF proposals: readable by anyone with the token link
+    // Quotation PDF proposals: readable by anyone with the link, writable only by authenticated agents
     match /quotations/{allPaths=**} {
       allow read: if true;
-      allow write: if request.resource.size < 10 * 1024 * 1024;
+      allow write: if isAuthenticated() &&
+                      request.resource.size < 10 * 1024 * 1024 &&
+                      request.resource.contentType == 'application/pdf';
     }
   }
 }

@@ -126,9 +126,10 @@ export function SiteHeader({ className }: SiteHeaderProps) {
               <span className="hidden xl:inline text-xs font-semibold text-muted-foreground max-w-[120px] truncate">
                 {agentProfile?.fullName || user.displayName || user.email}
               </span>
-              <Button size="sm" className="h-8 text-xs gap-1.5 shadow-sm px-3" asChild>
+              <Button size="sm" className="h-8 text-xs gap-1.5 shadow-sm px-2.5 sm:px-3" asChild>
                 <Link href="/dashboard">
-                  <span>Command Center</span>
+                  <span className="hidden sm:inline">Command Center</span>
+                  <span className="sm:hidden">CRM</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </Button>

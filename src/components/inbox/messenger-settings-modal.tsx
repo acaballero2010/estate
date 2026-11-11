@@ -20,6 +20,7 @@ import {
   Unplug,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/firebase/auth-context";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -42,6 +43,7 @@ export function MessengerSettingsModal({
   open,
   onOpenChange,
 }: MessengerSettingsModalProps) {
+  const { user } = useAuth();
   const { messengerSettings, updateMessengerSettings, activeAgentUid } =
     useCrmStore();
 
@@ -106,9 +108,13 @@ export function MessengerSettingsModal({
 
     setIsVerifying(true);
     try {
+      const idToken = user ? await user.getIdToken() : "";
       const res = await fetch("/api/messenger/verify-token", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
         body: JSON.stringify({
           pageId: pageId.trim() || "0",
           pageAccessToken: pageAccessToken.trim(),

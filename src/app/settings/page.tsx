@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   BadgeCheck,
@@ -142,7 +143,8 @@ const PRESET_LICENSING_LOGOS = [
   const [newAwardInput, setNewAwardInput] = React.useState("");
   const [isUploadingAvatar, setIsUploadingAvatar] = React.useState(false);
   const [isUploadingBadge, setIsUploadingBadge] = React.useState(false);
-  const [role, setRole] = React.useState<"AGENT" | "TEAM_LEADER" | "BROKER">("BROKER");
+  const [role, setRole] = React.useState<"AGENT" | "TEAM_LEADER" | "BROKER" | "ADMIN">("BROKER");
+  const [isPlatformAdmin, setIsPlatformAdmin] = React.useState(false);
   const [isSavingProfile, setIsSavingProfile] = React.useState(false);
 
   // --- Messenger State ---
@@ -188,7 +190,8 @@ const PRESET_LICENSING_LOGOS = [
       setBoardAffiliation(agentProfile.boardAffiliation || "");
       setBioHeadline(agentProfile.bioHeadline || "");
       setAwards(agentProfile.awards || []);
-      setRole((agentProfile.role as "AGENT" | "TEAM_LEADER" | "BROKER") || "BROKER");
+      setRole((agentProfile.role as "AGENT" | "TEAM_LEADER" | "BROKER" | "ADMIN") || "BROKER");
+      setIsPlatformAdmin(Boolean(agentProfile.role === "ADMIN" || agentProfile.isPlatformAdmin));
     }
   }, [agentProfile, user]);
 
@@ -269,12 +272,34 @@ const PRESET_LICENSING_LOGOS = [
         bioHeadline: bioHeadline.trim() || undefined,
         awards,
         role,
+        isPlatformAdmin,
       });
       toast.success("Agent profile and credibility credentials updated successfully!");
     } catch {
       toast.error("Failed to update profile. Please try again.");
     } finally {
       setIsSavingProfile(false);
+    }
+  };
+
+  const handleTogglePlatformAdmin = async () => {
+    const nextAdmin = !isPlatformAdmin;
+    setIsPlatformAdmin(nextAdmin);
+    const nextRole = nextAdmin ? ("ADMIN" as const) : ("BROKER" as const);
+    setRole(nextRole);
+    try {
+      await updateProfile({
+        role: nextRole,
+        isPlatformAdmin: nextAdmin,
+      });
+      if (nextAdmin) {
+        toast.success("Account elevated to Platform Admin! Access to /admin is now unlocked.");
+      } else {
+        toast.info("Platform Admin privileges relinquished.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to update admin privileges.");
     }
   };
 
@@ -337,9 +362,13 @@ const PRESET_LICENSING_LOGOS = [
 
     setIsVerifyingToken(true);
     try {
+      const idToken = user ? await user.getIdToken() : "";
       const res = await fetch("/api/messenger/verify-token", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
         body: JSON.stringify({
           pageId: pageId.trim() || "0",
           pageAccessToken: pageAccessToken.trim(),
@@ -427,6 +456,7 @@ const PRESET_LICENSING_LOGOS = [
       };
       if (typeof window !== "undefined") {
         localStorage.setItem("propflow_general_settings", JSON.stringify(payload));
+        window.dispatchEvent(new Event("propflow-settings-updated"));
       }
       toast.success("Quotation & financing calculation defaults saved!");
     } catch {
@@ -742,15 +772,67 @@ const PRESET_LICENSING_LOGOS = [
                       <select
                         id="prof-role"
                         value={role}
-                        onChange={(e) =>
-                          setRole(e.target.value as "AGENT" | "TEAM_LEADER" | "BROKER")
-                        }
+                        onChange={(e) => {
+                          const val = e.target.value as "AGENT" | "TEAM_LEADER" | "BROKER" | "ADMIN";
+                          setRole(val);
+                          setIsPlatformAdmin(val === "ADMIN");
+                        }}
                         className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm"
                       >
+                        <option value="ADMIN">Platform Administrator &amp; Governing Broker</option>
                         <option value="BROKER">Licensed Real Estate Broker (Principal)</option>
                         <option value="TEAM_LEADER">Sales Director / Unit Team Leader</option>
                         <option value="AGENT">Accredited Real Estate Salesperson</option>
                       </select>
+                    </div>
+
+                    {/* Platform Admin Privileges Box */}
+                    <div className="sm:col-span-2 rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/20 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 shrink-0">
+                          <ShieldCheck className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-foreground">
+                              Platform Administrator Access
+                            </span>
+                            {isPlatformAdmin ? (
+                              <Badge variant="won" className="text-[10px] py-0">
+                                Admin Active
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] py-0 text-muted-foreground">
+                                Standard User
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Full governance, subscriber tier overrides, and access to <code className="text-indigo-600 font-semibold">/admin</code>.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isPlatformAdmin && (
+                          <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" asChild>
+                            <Link href="/admin">
+                              <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
+                              Open /admin →
+                            </Link>
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={isPlatformAdmin ? "outline" : "default"}
+                          className={`h-8 text-xs gap-1.5 ${!isPlatformAdmin ? "bg-indigo-600 hover:bg-indigo-700 text-white" : ""}`}
+                          onClick={handleTogglePlatformAdmin}
+                        >
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          {isPlatformAdmin ? "Relinquish Admin Rights" : "Elevate to Platform Admin"}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>

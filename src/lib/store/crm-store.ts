@@ -9,6 +9,9 @@ import type {
   Message,
   SavedReplySnippet,
   Deal,
+  BankLoanDetails,
+  CommissionTranche,
+  CoBrokerageDetails,
   CreateLeadInput,
   AgentMessengerSettings,
   TrippingScheduleItem,
@@ -20,6 +23,10 @@ import {
   loadAgentMessengerSettings,
   saveAgentMessengerSettings,
 } from "@/lib/firebase/firestore-sync";
+import {
+  buildPersonalizedGreetingReply,
+  parseBuyerMessengerIntent,
+} from "@/lib/messenger-auto-responder";
 
 const AGENT_ID = "00000000-0000-4000-8000-000000000001";
 
@@ -566,6 +573,84 @@ export const INITIAL_DEALS: Deal[] = [
         releasedAmount: 0,
       },
     ],
+    bankLoanDetails: {
+      partnerBank: "BPI_FAMILY",
+      applicationRefNo: "BPI-HL-2026-88912",
+      loanOfficerName: "Ma. Cristina Valenzuela",
+      loanOfficerPhone: "+63 917 555 4321",
+      loanOfficerEmail: "mcvalenzuela@bpi.com.ph",
+      targetLoanAmount: 15450460, // 80% balance
+      approvedLoanAmount: 15450460,
+      loanShortfall: 0,
+      logStatus: "NOTICE_OF_APPROVAL",
+      targetLogDate: new Date("2027-10-15T00:00:00Z"),
+      actualLogReleaseDate: null,
+      incomeDocsChecklist: [
+        { code: "BIR_2316", label: "BIR Form 2316 / Hospital Practice ITR", collected: true },
+        { code: "PAYSLIPS_3M", label: "Latest 3 Months Compensation Slips", collected: true },
+        { code: "COE_COMPENSATION", label: "Certificate of Medical Practice & Compensation", collected: true },
+        { code: "BANK_STATEMENTS_6M", label: "6 Months BPI Account Statements", collected: true },
+        { code: "GOV_ID_2X", label: "2 Valid PRC/Passport Government IDs", collected: true },
+      ],
+      remarks: "BPI Private Wealth approved 80% loan with 6.75% 5-year fixed interest rate. Awaiting final appraisal inspection report for LOG release.",
+    },
+    commissionTranches: [
+      {
+        id: "tranche-0104-1",
+        trancheNumber: 1,
+        name: "Tranche 1 (Reservation & 1st DP Cleared)",
+        milestoneCondition: "Cleared 1st monthly DP + Verified RAF",
+        percentage: 20,
+        grossAmount: 179450,
+        withholdingTaxAmount: 17945,
+        netAmount: 161505,
+        status: "RELEASED",
+        expectedClearanceDate: new Date("2026-11-15T00:00:00Z"),
+        actualReleaseDate: new Date("2026-11-16T10:00:00Z"),
+        orNumber: "OR-AYALA-89211",
+      },
+      {
+        id: "tranche-0104-2",
+        trancheNumber: 2,
+        name: "Tranche 2 (10% Equity Milestone)",
+        milestoneCondition: "10% of total TCP collected by developer",
+        percentage: 40,
+        grossAmount: 358900,
+        withholdingTaxAmount: 35890,
+        netAmount: 323010,
+        status: "PENDING",
+        expectedClearanceDate: new Date("2027-04-30T00:00:00Z"),
+        actualReleaseDate: null,
+      },
+      {
+        id: "tranche-0104-3",
+        trancheNumber: 3,
+        name: "Tranche 3 (Bank Takeout / Full Liquidation)",
+        milestoneCondition: "BPI Family loan proceeds credited to developer",
+        percentage: 40,
+        grossAmount: 358900,
+        withholdingTaxAmount: 35890,
+        netAmount: 323010,
+        status: "PENDING",
+        expectedClearanceDate: new Date("2027-10-30T00:00:00Z"),
+        actualReleaseDate: null,
+      },
+    ],
+    coBrokerageDetails: {
+      isCoBrokered: true,
+      externalBrokerName: "Atty. Katrina Alcantara, REB",
+      externalBrokerPrcLicense: "PRC REB #0031844",
+      externalBrokerDhsudReg: "DHSUD-NCR-B-04/24-9122",
+      externalBrokerageAgency: "Apex Prime Realty & Associates",
+      externalBrokerPhone: "+63 917 889 2341",
+      externalBrokerEmail: "katrina.alcantara@apexrealty.ph",
+      coBrokeRole: "SELLING_BROKER",
+      coBrokeSharePercent: 50,
+      coBrokeGrossAmount: 448625,
+      moaSigned: true,
+      moaSignedDate: new Date("2026-11-06T16:30:00Z"),
+      remarks: "50/50 External Co-Brokerage Split for BGC high-tier buyer. Client endorsed with signed MOA.",
+    },
     notes: "Client prefers BPI or Metrobank Private Wealth for housing loan takeout.",
     createdAt: new Date("2026-11-06T15:00:00Z"),
     updatedAt: new Date("2026-11-07T18:00:00Z"),
@@ -641,6 +726,70 @@ export const INITIAL_DEALS: Deal[] = [
         releaseStatus: "FULLY_RELEASED",
         releasedAmount: 127575,
         releasedAt: new Date("2026-11-04T15:00:00Z"),
+      },
+    ],
+    bankLoanDetails: {
+      partnerBank: "METROBANK",
+      applicationRefNo: "MB-HL-2026-14022",
+      loanOfficerName: "Eduardo Concepcion",
+      loanOfficerPhone: "+63 918 444 8822",
+      loanOfficerEmail: "econcepcion@metrobank.com.ph",
+      targetLoanAmount: 8051400,
+      approvedLoanAmount: 8051400,
+      loanShortfall: 0,
+      logStatus: "TAKEOUT_COMPLETE",
+      targetLogDate: new Date("2026-10-25T00:00:00Z"),
+      actualLogReleaseDate: new Date("2026-10-26T00:00:00Z"),
+      incomeDocsChecklist: [
+        { code: "BIR_2316", label: "ITR Form 2316", collected: true },
+        { code: "PAYSLIPS_3M", label: "3 Months Payslips", collected: true },
+        { code: "COE_COMPENSATION", label: "Certificate of Employment", collected: true },
+        { code: "BANK_STATEMENTS_6M", label: "6 Months Bank Statements", collected: true },
+      ],
+      remarks: "Metrobank Letter of Guarantee executed & full liquidation disbursed to Ayala Premier.",
+    },
+    commissionTranches: [
+      {
+        id: "tranche-0088-1",
+        trancheNumber: 1,
+        name: "Tranche 1 (Reservation Cleared)",
+        milestoneCondition: "RAF Cleared",
+        percentage: 20,
+        grossAmount: 94500,
+        withholdingTaxAmount: 9450,
+        netAmount: 85050,
+        status: "RELEASED",
+        expectedClearanceDate: new Date("2026-10-01T00:00:00Z"),
+        actualReleaseDate: new Date("2026-10-02T00:00:00Z"),
+        orNumber: "OR-AYALA-77401",
+      },
+      {
+        id: "tranche-0088-2",
+        trancheNumber: 2,
+        name: "Tranche 2 (10% Equity Stage)",
+        milestoneCondition: "10% Equity Cleared",
+        percentage: 40,
+        grossAmount: 189000,
+        withholdingTaxAmount: 18900,
+        netAmount: 170100,
+        status: "RELEASED",
+        expectedClearanceDate: new Date("2026-10-15T00:00:00Z"),
+        actualReleaseDate: new Date("2026-10-16T00:00:00Z"),
+        orNumber: "OR-AYALA-77820",
+      },
+      {
+        id: "tranche-0088-3",
+        trancheNumber: 3,
+        name: "Tranche 3 (Takeout Liquidation)",
+        milestoneCondition: "Metrobank LOG Released",
+        percentage: 40,
+        grossAmount: 189000,
+        withholdingTaxAmount: 18900,
+        netAmount: 170100,
+        status: "RELEASED",
+        expectedClearanceDate: new Date("2026-11-01T00:00:00Z"),
+        actualReleaseDate: new Date("2026-11-01T12:00:00Z"),
+        orNumber: "OR-AYALA-78210",
       },
     ],
     notes: "Full 100% commission released upon BPI LOG takeout.",
@@ -868,7 +1017,7 @@ interface CrmState {
     senderName: string,
     content: string,
     metaMid?: string
-  ) => void;
+  ) => { leadId: string; isNewLead: boolean; autoReplied: boolean };
   saveQuotation: (quotation: Quotation) => void;
   updateQuotationStatus: (quotationId: string, status: Quotation["status"]) => void;
   addLeadDocument: (
@@ -887,7 +1036,14 @@ interface CrmState {
     remarks?: string
   ) => void;
   deleteLeadDocument: (leadId: string, documentId: string) => void;
+  updateLeadTags: (leadId: string, tags: string[]) => void;
   toggleDealRequirementStatus: (dealId: string, requirementId: string) => void;
+  updateDealStage: (dealId: string, stage: Deal["stage"]) => void;
+  updateDealBankLoanDetails: (dealId: string, details: Partial<BankLoanDetails>) => void;
+  toggleDealIncomeDoc: (dealId: string, docCode: string) => void;
+  updateDealTrancheStatus: (dealId: string, trancheId: string, status: CommissionTranche["status"]) => void;
+  updateDealCoBrokerage: (dealId: string, details: Partial<CoBrokerageDetails>) => void;
+  disburseDealCommission: (dealId: string) => void;
   createDealFromReservation: (params: {
     leadId: string;
     propertyId: string;
@@ -901,6 +1057,8 @@ interface CrmState {
     receiptImageUrl: string;
     signatureDataUrl?: string;
   }) => Deal;
+  syncLiveMessages: (liveMessages: Message[]) => void;
+  syncLiveLeads: (liveLeads: Lead[]) => void;
 }
 
 function getLocalCustomProperties(agentUid?: string | null): Property[] {
@@ -1478,15 +1636,18 @@ export const useCrmStore = create<CrmState>((set, get) => ({
 
   receiveWebhookMessage: (psid, senderName, content, metaMid) => {
     const existingLead = get().leads.find((l) => l.messengerPsid === psid);
-    let targetLeadId = existingLead?.id;
+    const isNewLead = !existingLead;
+    const intent = parseBuyerMessengerIntent(content);
+    let targetLeadId = existingLead?.id || "";
+    let createdLead: Lead | null = null;
 
     if (!existingLead) {
       const nameParts = senderName.trim().split(" ");
       const firstName = nameParts[0] || "Messenger";
       const lastName = nameParts.slice(1).join(" ") || "Lead";
-      const createdLead: Lead = {
+      createdLead = {
         id: crypto.randomUUID(),
-        assignedAgentId: AGENT_ID,
+        assignedAgentId: get().activeAgentUid || AGENT_ID,
         firstName,
         lastName,
         email: "",
@@ -1494,40 +1655,103 @@ export const useCrmStore = create<CrmState>((set, get) => ({
         messengerPsid: psid,
         stage: "NEW_LEAD",
         source: "FACEBOOK_MESSENGER",
-        priority: "HIGH",
-        budgetMin: 5000000,
-        budgetMax: 10000000,
-        preferredLocations: ["Metro Manila"],
-        preferredPropertyTypes: ["CONDOMINIUM"],
-        financingPreference: "BANK",
-        notes: "Auto-captured via Facebook Messenger Webhook.",
-        tags: ["Messenger Webhook"],
+        priority: intent.priority,
+        budgetMin: intent.budgetMin,
+        budgetMax: intent.budgetMax,
+        preferredLocations: intent.preferredLocations,
+        preferredPropertyTypes: intent.preferredPropertyTypes,
+        financingPreference: intent.financingPreference,
+        notes: `Auto-captured via Facebook Messenger: "${content}"`,
+        tags: intent.detectedTags,
         documents: [],
-        lastContactedAt: new Date(),
+        lastContactedAt: null,
         nextFollowUpAt: new Date(Date.now() + 86400000),
         createdAt: new Date(),
         updatedAt: new Date(),
       };
       targetLeadId = createdLead.id;
-      set((state) => ({ leads: [createdLead, ...state.leads] }));
+      set((state) => ({ leads: [createdLead!, ...state.leads] }));
+      void persistAgentDocument(get().activeAgentUid, "leads", createdLead);
     }
 
-    if (targetLeadId) {
-      const incomingMsg: Message = {
+    const incomingMsg: Message = {
+      id: crypto.randomUUID(),
+      leadId: targetLeadId,
+      senderType: "LEAD",
+      senderId: psid,
+      channel: "FACEBOOK_MESSENGER",
+      metaMid: metaMid ?? `m_${Date.now()}`,
+      content,
+      deliveryStatus: "DELIVERED",
+      createdAt: new Date(),
+    };
+    set((state) => ({
+      messages: [...state.messages, incomingMsg],
+    }));
+    void persistAgentDocument(get().activeAgentUid, "messages", incomingMsg);
+
+    // Trigger Instant Greeting Auto-Responder for newly captured leads when enabled
+    let autoReplied = false;
+    const settings = get().messengerSettings;
+    if (isNewLead && settings?.autoReplyGreeting) {
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "https://propflow.ph";
+      const replyContent = buildPersonalizedGreetingReply({
+        firstName: createdLead?.firstName || senderName.split(" ")[0] || "there",
+        greetingTemplate: settings.greetingMessage,
+        intent,
+        properties: get().properties,
+        portalUrl: `${origin}/showcase?view=client`,
+      });
+
+      const autoMsg: Message = {
         id: crypto.randomUUID(),
         leadId: targetLeadId,
-        senderType: "LEAD",
-        senderId: psid,
+        senderType: "AGENT",
+        senderId: get().activeAgentUid || AGENT_ID,
         channel: "FACEBOOK_MESSENGER",
-        metaMid: metaMid ?? `m_${Date.now()}`,
-        content,
-        deliveryStatus: "DELIVERED",
-        createdAt: new Date(),
+        metaMid: `m_auto_${Date.now()}`,
+        content: replyContent,
+        deliveryStatus: "SENT",
+        createdAt: new Date(Date.now() + 300),
       };
+
       set((state) => ({
-        messages: [...state.messages, incomingMsg],
+        messages: [...state.messages, autoMsg],
+        leads: state.leads.map((l) =>
+          l.id === targetLeadId
+            ? {
+                ...l,
+                stage: l.stage === "NEW_LEAD" ? "CONTACTED" : l.stage,
+                lastContactedAt: new Date(),
+                updatedAt: new Date(),
+              }
+            : l
+        ),
       }));
+
+      void persistAgentDocument(get().activeAgentUid, "messages", autoMsg);
+      const syncedLead = get().leads.find((l) => l.id === targetLeadId);
+      if (syncedLead) {
+        void persistAgentDocument(get().activeAgentUid, "leads", syncedLead);
+      }
+
+      if (settings.isConnected && settings.pageAccessToken && typeof window !== "undefined") {
+        void fetch("/api/messenger/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recipientPsid: psid,
+            text: replyContent,
+            pageAccessToken: settings.pageAccessToken,
+          }),
+        }).catch(() => {});
+      }
+
+      autoReplied = true;
     }
+
+    return { leadId: targetLeadId, isNewLead, autoReplied };
   },
 
   saveQuotation: (quotation) => {
@@ -1653,6 +1877,25 @@ export const useCrmStore = create<CrmState>((set, get) => ({
     }
   },
 
+  updateLeadTags: (leadId, tags) => {
+    set((state) => ({
+      leads: state.leads.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              tags,
+              updatedAt: new Date(),
+            }
+          : l
+      ),
+    }));
+
+    const updatedLead = get().leads.find((l) => l.id === leadId);
+    if (updatedLead) {
+      void persistAgentDocument(get().activeAgentUid, "leads", updatedLead);
+    }
+  },
+
   toggleDealRequirementStatus: (dealId, requirementId) => {
     set((state) => ({
       deals: state.deals.map((deal) => {
@@ -1677,6 +1920,236 @@ export const useCrmStore = create<CrmState>((set, get) => ({
     const updatedDeal = get().deals.find((d) => d.id === dealId);
     if (updatedDeal) {
       void persistAgentDocument(get().activeAgentUid, "deals", updatedDeal);
+    }
+  },
+
+  updateDealStage: (dealId, stage) => {
+    set((state) => ({
+      deals: state.deals.map((deal) =>
+        deal.id === dealId
+          ? {
+              ...deal,
+              stage,
+              updatedAt: new Date(),
+              actualClosedDate:
+                stage === "CLOSED_RELEASED" && !deal.actualClosedDate
+                  ? new Date()
+                  : deal.actualClosedDate,
+            }
+          : deal
+      ),
+    }));
+    const updatedDeal = get().deals.find((d) => d.id === dealId);
+    if (updatedDeal) {
+      void persistAgentDocument(get().activeAgentUid, "deals", updatedDeal);
+    }
+  },
+
+  updateDealBankLoanDetails: (dealId, details) => {
+    set((state) => ({
+      deals: state.deals.map((deal) => {
+        if (deal.id !== dealId) return deal;
+        const currentLoan = deal.bankLoanDetails || {
+          partnerBank: "BPI_FAMILY",
+          applicationRefNo: "",
+          loanOfficerName: "",
+          loanOfficerPhone: "",
+          loanOfficerEmail: "",
+          targetLoanAmount: deal.totalContractPrice * 0.8,
+          approvedLoanAmount: deal.totalContractPrice * 0.8,
+          loanShortfall: 0,
+          logStatus: "NOT_STARTED",
+          targetLogDate: deal.targetLoanTakeoutDate || null,
+          actualLogReleaseDate: null,
+          incomeDocsChecklist: [
+            { code: "BIR_2316", label: "BIR Form 2316 / Latest ITR", collected: false },
+            { code: "PAYSLIPS_3M", label: "Latest 3 Months Official Payslips", collected: false },
+            { code: "COE_COMPENSATION", label: "Certificate of Employment & Compensation", collected: false },
+            { code: "BANK_STATEMENTS_6M", label: "6 Months Bank Statements", collected: false },
+            { code: "GOV_ID_2X", label: "2 Valid Government IDs with Signatures", collected: false },
+          ],
+        };
+
+        const target = details.targetLoanAmount ?? currentLoan.targetLoanAmount;
+        const approved = details.approvedLoanAmount ?? currentLoan.approvedLoanAmount;
+        const loanShortfall = Math.max(0, target - approved);
+
+        const updatedLoan: BankLoanDetails = {
+          ...currentLoan,
+          ...details,
+          targetLoanAmount: target,
+          approvedLoanAmount: approved,
+          loanShortfall,
+        };
+
+        return {
+          ...deal,
+          bankLoanDetails: updatedLoan,
+          updatedAt: new Date(),
+        };
+      }),
+    }));
+    const updatedDeal = get().deals.find((d) => d.id === dealId);
+    if (updatedDeal) {
+      void persistAgentDocument(get().activeAgentUid, "deals", updatedDeal);
+    }
+  },
+
+  toggleDealIncomeDoc: (dealId, docCode) => {
+    set((state) => ({
+      deals: state.deals.map((deal) => {
+        if (deal.id !== dealId) return deal;
+        const currentLoan = deal.bankLoanDetails || {
+          partnerBank: "BPI_FAMILY",
+          applicationRefNo: "",
+          loanOfficerName: "",
+          loanOfficerPhone: "",
+          loanOfficerEmail: "",
+          targetLoanAmount: deal.totalContractPrice * 0.8,
+          approvedLoanAmount: deal.totalContractPrice * 0.8,
+          loanShortfall: 0,
+          logStatus: "NOT_STARTED",
+          targetLogDate: deal.targetLoanTakeoutDate || null,
+          actualLogReleaseDate: null,
+          incomeDocsChecklist: [
+            { code: "BIR_2316", label: "BIR Form 2316 / Latest ITR", collected: false },
+            { code: "PAYSLIPS_3M", label: "Latest 3 Months Official Payslips", collected: false },
+            { code: "COE_COMPENSATION", label: "Certificate of Employment & Compensation", collected: false },
+            { code: "BANK_STATEMENTS_6M", label: "6 Months Bank Statements", collected: false },
+            { code: "GOV_ID_2X", label: "2 Valid Government IDs with Signatures", collected: false },
+          ],
+        };
+
+        const nextDocs = currentLoan.incomeDocsChecklist.map((doc) =>
+          doc.code === docCode
+            ? {
+                ...doc,
+                collected: !doc.collected,
+                verifiedAt: !doc.collected ? new Date() : null,
+              }
+            : doc
+        );
+
+        return {
+          ...deal,
+          bankLoanDetails: {
+            ...currentLoan,
+            incomeDocsChecklist: nextDocs,
+          },
+          updatedAt: new Date(),
+        };
+      }),
+    }));
+    const updatedDeal = get().deals.find((d) => d.id === dealId);
+    if (updatedDeal) {
+      void persistAgentDocument(get().activeAgentUid, "deals", updatedDeal);
+    }
+  },
+
+  updateDealTrancheStatus: (dealId, trancheId, status) => {
+    const now = new Date();
+    set((state) => ({
+      deals: state.deals.map((deal) => {
+        if (deal.id !== dealId) return deal;
+        const nextTranches = (deal.commissionTranches || []).map((tranche) =>
+          tranche.id === trancheId
+            ? {
+                ...tranche,
+                status,
+                actualReleaseDate: status === "RELEASED" ? now : tranche.actualReleaseDate,
+              }
+            : tranche
+        );
+        return {
+          ...deal,
+          commissionTranches: nextTranches,
+          updatedAt: now,
+        };
+      }),
+    }));
+    const updatedDeal = get().deals.find((d) => d.id === dealId);
+    if (updatedDeal) {
+      void persistAgentDocument(get().activeAgentUid, "deals", updatedDeal);
+    }
+  },
+
+  updateDealCoBrokerage: (dealId, details) => {
+    const now = new Date();
+    set((state) => ({
+      deals: state.deals.map((deal) => {
+        if (deal.id !== dealId) return deal;
+        const currentCoBroke = deal.coBrokerageDetails || {
+          isCoBrokered: false,
+          externalBrokerName: "",
+          externalBrokerPrcLicense: "",
+          externalBrokerDhsudReg: "",
+          externalBrokerageAgency: "",
+          externalBrokerPhone: "",
+          externalBrokerEmail: "",
+          coBrokeRole: "SELLING_BROKER" as const,
+          coBrokeSharePercent: 50,
+          coBrokeGrossAmount: deal.grossCommissionTotal * 0.5,
+          moaSigned: false,
+          moaSignedDate: null,
+          moaDocumentUrl: null,
+          remarks: "",
+        };
+
+        const merged: CoBrokerageDetails = {
+          ...currentCoBroke,
+          ...details,
+        };
+
+        // Recalculate co-broke gross amount based on share percent
+        if (typeof details.coBrokeSharePercent === "number") {
+          merged.coBrokeGrossAmount = (deal.grossCommissionTotal * details.coBrokeSharePercent) / 100;
+        }
+
+        return {
+          ...deal,
+          coBrokerageDetails: merged,
+          updatedAt: now,
+        };
+      }),
+    }));
+    const updatedDeal = get().deals.find((d) => d.id === dealId);
+    if (updatedDeal) {
+      void persistAgentDocument(get().activeAgentUid, "deals", updatedDeal);
+    }
+  },
+
+  disburseDealCommission: (dealId) => {
+    const now = new Date();
+    let affectedLeadId: string | null = null;
+
+    set((state) => ({
+      deals: state.deals.map((deal) => {
+        if (deal.id !== dealId) return deal;
+        affectedLeadId = deal.leadId;
+        const fullyReleasedSplits = deal.commissionSplits.map((split) => ({
+          ...split,
+          releaseStatus: "FULLY_RELEASED" as const,
+          releasedAmount: split.netCommissionAmount,
+          releasedAt: split.releasedAt || now,
+        }));
+
+        return {
+          ...deal,
+          stage: "CLOSED_RELEASED" as const,
+          actualClosedDate: deal.actualClosedDate || now,
+          commissionSplits: fullyReleasedSplits,
+          updatedAt: now,
+        };
+      }),
+    }));
+
+    const updatedDeal = get().deals.find((d) => d.id === dealId);
+    if (updatedDeal) {
+      void persistAgentDocument(get().activeAgentUid, "deals", updatedDeal);
+    }
+
+    if (affectedLeadId) {
+      get().moveLeadStage(affectedLeadId, "CLOSED_WON");
     }
   },
 
@@ -1789,6 +2262,67 @@ export const useCrmStore = create<CrmState>((set, get) => ({
           releasedAmount: 0,
         },
       ],
+      bankLoanDetails: {
+        partnerBank: "BPI_FAMILY",
+        applicationRefNo: `BPI-APP-${Math.floor(10000 + Math.random() * 90000)}`,
+        loanOfficerName: "Designated Home Loan Specialist",
+        loanOfficerPhone: "+63 917 123 4567",
+        loanOfficerEmail: "homeloans@bpi.com.ph",
+        targetLoanAmount: params.totalContractPrice * 0.8,
+        approvedLoanAmount: params.totalContractPrice * 0.8,
+        loanShortfall: 0,
+        logStatus: "DOCS_COLLECTING",
+        targetLogDate: new Date(Date.now() + 300 * 86400000),
+        actualLogReleaseDate: null,
+        incomeDocsChecklist: [
+          { code: "BIR_2316", label: "BIR Form 2316 / Latest ITR with AFS", collected: false },
+          { code: "PAYSLIPS_3M", label: "Latest 3 Months Official Payslips", collected: false },
+          { code: "COE_COMPENSATION", label: "Certificate of Employment & Compensation", collected: false },
+          { code: "BANK_STATEMENTS_6M", label: "6 Months Bank Statements", collected: false },
+          { code: "GOV_ID_2X", label: "2 Valid Government IDs with Signatures", collected: true },
+        ],
+      },
+      commissionTranches: [
+        {
+          id: crypto.randomUUID(),
+          trancheNumber: 1,
+          name: "Tranche 1 (Reservation & 1st DP Cleared)",
+          milestoneCondition: "Cleared 1st monthly DP + Verified RAF",
+          percentage: 20,
+          grossAmount: grossCommissionTotal * 0.2,
+          withholdingTaxAmount: grossCommissionTotal * 0.2 * 0.1,
+          netAmount: grossCommissionTotal * 0.2 * 0.9,
+          status: "ELIGIBLE",
+          expectedClearanceDate: new Date(Date.now() + 30 * 86400000),
+          actualReleaseDate: null,
+        },
+        {
+          id: crypto.randomUUID(),
+          trancheNumber: 2,
+          name: "Tranche 2 (10% Equity Collection)",
+          milestoneCondition: "10% of total TCP collected by developer",
+          percentage: 40,
+          grossAmount: grossCommissionTotal * 0.4,
+          withholdingTaxAmount: grossCommissionTotal * 0.4 * 0.1,
+          netAmount: grossCommissionTotal * 0.4 * 0.9,
+          status: "PENDING",
+          expectedClearanceDate: new Date(Date.now() + 180 * 86400000),
+          actualReleaseDate: null,
+        },
+        {
+          id: crypto.randomUUID(),
+          trancheNumber: 3,
+          name: "Tranche 3 (Bank Takeout / Full Liquidation)",
+          milestoneCondition: "Bank loan proceeds credited to developer",
+          percentage: 40,
+          grossAmount: grossCommissionTotal * 0.4,
+          withholdingTaxAmount: grossCommissionTotal * 0.4 * 0.1,
+          netAmount: grossCommissionTotal * 0.4 * 0.9,
+          status: "PENDING",
+          expectedClearanceDate: new Date(Date.now() + 365 * 86400000),
+          actualReleaseDate: null,
+        },
+      ],
       notes: "Created automatically via Buyer Portal E-Signature & Reservation Fee Receipt submission.",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -1834,6 +2368,29 @@ export const useCrmStore = create<CrmState>((set, get) => ({
     }
 
     return newDeal;
+  },
+
+  syncLiveMessages: (liveMessages) => {
+    if (!liveMessages || liveMessages.length === 0) return;
+    set((state) => {
+      const msgMap = new Map<string, Message>();
+      state.messages.forEach((m) => msgMap.set(m.id, m));
+      liveMessages.forEach((m) => msgMap.set(m.id, m));
+      const merged = Array.from(msgMap.values()).sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      return { messages: merged };
+    });
+  },
+
+  syncLiveLeads: (liveLeads) => {
+    if (!liveLeads || liveLeads.length === 0) return;
+    set((state) => {
+      const leadMap = new Map<string, Lead>();
+      state.leads.forEach((l) => leadMap.set(l.id, l));
+      liveLeads.forEach((l) => leadMap.set(l.id, l));
+      return { leads: Array.from(leadMap.values()) };
+    });
   },
 }));
 

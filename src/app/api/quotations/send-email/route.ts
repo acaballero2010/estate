@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { z } from "zod";
+import { adminAuth } from "@/lib/firebase/admin";
 
 const SendQuotationEmailSchema = z.object({
   recipientEmail: z.string().email(),
@@ -18,14 +19,31 @@ const SendQuotationEmailSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify agent session cookie or authorization header
-    const authSessionCookie = request.cookies.get("propflow_auth_session");
+    // Verify agent authentication: Require verified Firebase ID Token or valid session
     const authHeader = request.headers.get("authorization");
-    if (!authSessionCookie && !authHeader) {
+    const authSessionCookie = request.cookies.get("propflow_auth_session");
+
+    let verifiedAgentUid: string | null = null;
+    let verifiedAgentEmail: string | null = null;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const idToken = authHeader.slice(7).trim();
+      try {
+        const decoded = await adminAuth.verifyIdToken(idToken);
+        verifiedAgentUid = decoded.uid;
+        verifiedAgentEmail = decoded.email || null;
+      } catch (authErr) {
+        console.warn("Invalid Firebase ID token in send-email request:", authErr);
+        return NextResponse.json(
+          { error: "Unauthorized. Invalid or expired authentication token." },
+          { status: 401 }
+        );
+      }
+    } else if (!authSessionCookie?.value) {
       return NextResponse.json(
         {
           error:
-            "Unauthorized. An active agent session is required to dispatch quotation emails.",
+            "Unauthorized. An active agent session or Bearer token is required to dispatch quotation emails.",
         },
         { status: 401 }
       );
@@ -123,19 +141,23 @@ export async function POST(request: NextRequest) {
         success: true,
         delivered: true,
         mode: "live_smtp",
+        senderUid: verifiedAgentUid,
+        senderEmail: verifiedAgentEmail,
         message: `Quotation email successfully sent to ${recipientEmail}`,
       });
     }
 
     // Local / Dev Fallback: Simulated success log
     console.log(
-      `[Email Dispatcher - Simulated] Successfully dispatched Quotation ${referenceNumber} to ${recipientEmail} (${recipientName}) for ${projectName} (${unitCode}).`
+      `[Email Dispatcher - Simulated] Dispatched Quotation ${referenceNumber} to ${recipientEmail} (${recipientName}) by agent ${verifiedAgentEmail || verifiedAgentUid || "session"} for ${projectName} (${unitCode}).`
     );
 
     return NextResponse.json({
       success: true,
       delivered: true,
       mode: "simulated_local",
+      senderUid: verifiedAgentUid,
+      senderEmail: verifiedAgentEmail,
       message: `Quotation ${referenceNumber} queued and dispatched to ${recipientEmail} (Simulated). Configure SMTP_HOST in .env.local for live production delivery.`,
     });
   } catch (error) {

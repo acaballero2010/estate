@@ -2,11 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   ArrowUpRight,
+  Bot,
   Calculator,
   CalendarCheck,
   CheckCircle2,
+  Clock,
   FileCheck2,
   Film,
   Flame,
@@ -15,8 +18,13 @@ import {
   MessageSquareText,
 } from "lucide-react";
 import { computeDealCommissionMetrics } from "@/lib/schemas";
+import {
+  evaluateLeadStaleness,
+  type LeadStalenessInfo,
+} from "@/lib/lead-scoring";
+import { useAutomationSettings } from "@/lib/hooks/use-automation-settings";
 import { useCrmStore } from "@/lib/store/crm-store";
-import { formatCompactCurrency, formatCurrency } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -26,9 +34,36 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { RollingNumber } from "@/components/ui/rolling-number";
 
 export default function DashboardPage() {
   const { leads, properties, deals, quotations, messages } = useCrmStore();
+  const { staleLeadHours, enableAiCopilot, nowMs, hydrated } =
+    useAutomationSettings();
+
+  const { stalenessMap, overdueCount } = React.useMemo(() => {
+    const map = new Map<string, LeadStalenessInfo>();
+    let overdue = 0;
+    if (hydrated && nowMs > 0) {
+      for (const lead of leads) {
+        const info = evaluateLeadStaleness(lead, staleLeadHours, nowMs);
+        map.set(lead.id, info);
+        if (info.isOverdue) overdue += 1;
+      }
+    }
+    return { stalenessMap: map, overdueCount: overdue };
+  }, [leads, staleLeadHours, nowMs, hydrated]);
+
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("error") === "unauthorized_admin") {
+        toast.error("Access Denied: Platform Administrator privileges required to access /admin.");
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, "", newUrl);
+      }
+    }
+  }, []);
 
   const liveMetrics = React.useMemo(() => {
     const activePipelineValue = leads
@@ -67,12 +102,20 @@ export default function DashboardPage() {
     return [...leads]
       .filter((l) => l.stage !== "CLOSED_WON" && l.stage !== "CLOSED_LOST")
       .sort((a, b) => {
+        const aStale = stalenessMap.get(a.id);
+        const bStale = stalenessMap.get(b.id);
+        const aOverdue = aStale?.isOverdue ? 1 : 0;
+        const bOverdue = bStale?.isOverdue ? 1 : 0;
+        if (aOverdue !== bOverdue) return bOverdue - aOverdue;
         if (a.priority === "HOT" && b.priority !== "HOT") return -1;
         if (a.priority !== "HOT" && b.priority === "HOT") return 1;
+        if (aOverdue && bOverdue) {
+          return (bStale?.hoursSinceContact ?? 0) - (aStale?.hoursSinceContact ?? 0);
+        }
         return b.budgetMax - a.budgetMax;
       })
-      .slice(0, 4);
-  }, [leads]);
+      .slice(0, 5);
+  }, [leads, stalenessMap]);
 
   return (
     <div className="container space-y-6 py-6">
@@ -115,7 +158,7 @@ export default function DashboardPage() {
               Active Pipeline Value
             </CardDescription>
             <CardTitle className="text-2xl font-serif font-normal tracking-tight text-foreground tabular-nums sm:text-3xl">
-              {formatCompactCurrency(liveMetrics.activePipelineValue)}
+              <RollingNumber value={liveMetrics.activePipelineValue} compact prefix="₱" />
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-0">
@@ -163,20 +206,20 @@ export default function DashboardPage() {
               Projected Net Commission
             </CardDescription>
             <CardTitle className="text-2xl font-serif font-normal tracking-tight text-foreground tabular-nums sm:text-3xl">
-              {formatCompactCurrency(liveMetrics.projectedCommission)}
+              <RollingNumber value={liveMetrics.projectedCommission} compact prefix="₱" />
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 pt-0">
             <Badge variant="won" className="text-[10px]">
-              {formatCompactCurrency(liveMetrics.collectedCommission)} collected YTD
+              <RollingNumber value={liveMetrics.collectedCommission} compact prefix="₱" /> collected YTD
             </Badge>
           </CardContent>
         </Card>
       </div>
 
-      {/* Live Active Deal Milestone Alert */}
+      {/* Live Active Deal Milestone Task Card */}
       {deals[0] && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-pipeline-won/30 bg-pipeline-won/10 p-3.5 sm:px-4 text-xs shadow-xs">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-lg border border-border/80 border-l-4 border-l-pipeline-won bg-card p-3.5 sm:p-4 text-xs shadow-xs">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-pipeline-won/20 text-pipeline-won font-bold">
               <CheckCircle2 className="h-4 w-4" />
@@ -214,69 +257,126 @@ export default function DashboardPage() {
       <Card>
         <CardHeader className="flex flex-col gap-2 border-b bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <CardTitle className="text-sm font-bold flex flex-wrap items-center gap-2">
               <Flame className="h-4 w-4 text-destructive" />
-              Priority Buyer Follow-Up &amp; Action Queue
+              <span>Priority Buyer Follow-Up &amp; Action Queue</span>
+              {hydrated && overdueCount > 0 && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] gap-1 border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                >
+                  <Clock className="h-3 w-3" />
+                  {overdueCount} Overdue (&gt;{staleLeadHours}h SLA)
+                </Badge>
+              )}
             </CardTitle>
             <CardDescription className="text-xs">
-              Highest-intent buyers ranked by priority and target budget. Launch a quotation or reply via Messenger in one click.
+              Ranked by follow-up SLA urgency ({staleLeadHours}h threshold), priority, and target budget.{" "}
+              <Link href="/settings" className="underline hover:text-foreground">
+                Configure SLA
+              </Link>
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm" className="h-7 text-xs w-fit" asChild>
-            <Link href="/pipeline">View All {leads.length} Leads →</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {hydrated && overdueCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs w-fit border-amber-500/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                asChild
+              >
+                <Link href="/pipeline?overdue=true">
+                  <Clock className="mr-1 h-3 w-3" />
+                  Filter Overdue ({overdueCount})
+                </Link>
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-7 text-xs w-fit" asChild>
+              <Link href="/pipeline">View All {leads.length} Leads →</Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="divide-y p-0">
-          {priorityFollowUps.map((lead) => (
-            <div
-              key={lead.id}
-              className="flex flex-col justify-between gap-3 p-3.5 sm:flex-row sm:items-center"
-            >
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-bold">
-                    {lead.firstName} {lead.lastName}
-                  </span>
-                  <Badge
-                    variant={lead.priority === "HOT" ? "destructive" : "new"}
-                    className="text-[10px]"
-                  >
-                    {lead.priority}
-                  </Badge>
-                  <Badge variant="outline" className="text-[10px]">
-                    {lead.stage.replace(/_/g, " ")}
-                  </Badge>
+          {priorityFollowUps.map((lead) => {
+            const staleness = stalenessMap.get(lead.id);
+            return (
+              <div
+                key={lead.id}
+                className="flex flex-col justify-between gap-3 p-3.5 sm:flex-row sm:items-center"
+              >
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-bold">
+                      {lead.firstName} {lead.lastName}
+                    </span>
+                    <Badge
+                      variant={lead.priority === "HOT" ? "destructive" : "new"}
+                      className="text-[10px]"
+                    >
+                      {lead.priority}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      {lead.stage.replace(/_/g, " ")}
+                    </Badge>
+                    {staleness?.isOverdue && (
+                      <Badge
+                        variant="outline"
+                        className={
+                          staleness.severity === "CRITICAL"
+                            ? "text-[10px] gap-1 border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                            : "text-[10px] gap-1 border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                        }
+                        title={`Last contacted ${staleness.hoursSinceContact}h ago (SLA: ${staleLeadHours}h)`}
+                      >
+                        <Clock className="h-2.5 w-2.5" />
+                        Overdue • {staleness.elapsedLabel}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    Budget: Up to{" "}
+                    <strong className="text-foreground tabular-nums">
+                      {formatCurrency(lead.budgetMax, "PHP", 0)}
+                    </strong>{" "}
+                    • {lead.preferredLocations.join(", ")} ({lead.financingPreference})
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground truncate">
-                  Budget: Up to{" "}
-                  <strong className="text-foreground tabular-nums">
-                    {formatCurrency(lead.budgetMax, "PHP", 0)}
-                  </strong>{" "}
-                  • {lead.preferredLocations.join(", ")} ({lead.financingPreference})
-                </p>
-              </div>
 
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1.5"
-                  asChild
-                >
-                  <Link href={`/inbox?leadId=${lead.id}`}>
-                    <MessageSquareText className="h-3.5 w-3.5 text-primary" />
-                    Message
-                  </Link>
-                </Button>
-                <Button size="sm" className="h-7 text-xs gap-1.5" asChild>
-                  <Link href={`/quotations?leadId=${lead.id}`}>
-                    <Calculator className="h-3.5 w-3.5" />
-                    Quote
-                  </Link>
-                </Button>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  {staleness?.isOverdue && enableAiCopilot && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 border border-primary/20 bg-primary/10 text-primary hover:bg-primary/20"
+                      asChild
+                    >
+                      <Link href={`/inbox?leadId=${lead.id}&checkIn=true`}>
+                        <Bot className="h-3.5 w-3.5" />
+                        AI Check-In
+                      </Link>
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5"
+                    asChild
+                  >
+                    <Link href={`/inbox?leadId=${lead.id}`}>
+                      <MessageSquareText className="h-3.5 w-3.5 text-primary" />
+                      Message
+                    </Link>
+                  </Button>
+                  <Button size="sm" className="h-7 text-xs gap-1.5" asChild>
+                    <Link href={`/quotations?leadId=${lead.id}`}>
+                      <Calculator className="h-3.5 w-3.5" />
+                      Quote
+                    </Link>
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 

@@ -94,6 +94,140 @@ export const CommissionSplitSchema = z.object({
 export type CommissionSplit = z.infer<typeof CommissionSplitSchema>;
 
 /**
+ * Accredited Philippine Mortgage Financing Partner Banks
+ */
+export const PartnerBankEnum = z.enum([
+  "BPI_FAMILY",
+  "BDO_UNIBANK",
+  "METROBANK",
+  "SECURITY_BANK",
+  "RCBC",
+  "CHINABANK",
+  "UNIONBANK",
+  "PAG_IBIG_FUND",
+  "IN_HOUSE_DEVELOPER",
+  "OTHER",
+]);
+export type PartnerBank = z.infer<typeof PartnerBankEnum>;
+
+export const PARTNER_BANK_LABELS: Record<PartnerBank, string> = {
+  BPI_FAMILY: "BPI Family Savings / BPI Home Loan",
+  BDO_UNIBANK: "BDO Unibank Consumer Lending",
+  METROBANK: "Metrobank Home Loan / Private Wealth",
+  SECURITY_BANK: "Security Bank Home Loan",
+  RCBC: "RCBC Home Loans",
+  CHINABANK: "China Bank Consumer Finance",
+  UNIONBANK: "UnionBank Mortgage",
+  PAG_IBIG_FUND: "Pag-IBIG Fund (HDMF Housing Loan)",
+  IN_HOUSE_DEVELOPER: "Developer In-House Financing",
+  OTHER: "Other Accredited Financial Institution",
+};
+
+/**
+ * Bank Mortgage Letter of Guarantee (LOG) Lifecycle Stages
+ */
+export const LogStatusEnum = z.enum([
+  "NOT_STARTED",
+  "DOCS_COLLECTING",
+  "SUBMITTED_TO_BANK",
+  "APPRAISAL_ONGOING",
+  "NOTICE_OF_APPROVAL", // NOA
+  "LOG_RELEASED",        // Letter of Guarantee Officially Released
+  "TAKEOUT_COMPLETE",    // Bank Proceeds Liquidated to Developer
+  "REJECTED_RE_ENDORSING",
+]);
+export type LogStatus = z.infer<typeof LogStatusEnum>;
+
+export const LOG_STATUS_LABELS: Record<LogStatus, string> = {
+  NOT_STARTED: "Not Started (Equity Period)",
+  DOCS_COLLECTING: "Collecting Income Docs",
+  SUBMITTED_TO_BANK: "Endorsed / Underwriting",
+  APPRAISAL_ONGOING: "Property Appraisal Ongoing",
+  NOTICE_OF_APPROVAL: "Notice of Approval (NOA) Issued",
+  LOG_RELEASED: "Letter of Guarantee (LOG) Released",
+  TAKEOUT_COMPLETE: "Loan Takeout & Liquidation Complete",
+  REJECTED_RE_ENDORSING: "Declined (Re-endorsing to Partner Bank)",
+};
+
+/**
+ * Income Requirements Checklist for Philippine Bank Loans
+ */
+export const BankIncomeDocSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  collected: z.boolean().default(false),
+  verifiedAt: z.coerce.date().optional().nullable(),
+  remarks: z.string().optional(),
+});
+export type BankIncomeDoc = z.infer<typeof BankIncomeDocSchema>;
+
+export const BankLoanDetailsSchema = z.object({
+  partnerBank: PartnerBankEnum.default("BPI_FAMILY"),
+  applicationRefNo: z.string().default(""),
+  loanOfficerName: z.string().default(""),
+  loanOfficerPhone: z.string().default(""),
+  loanOfficerEmail: z.string().default(""),
+  targetLoanAmount: z.coerce.number().nonnegative().default(0),
+  approvedLoanAmount: z.coerce.number().nonnegative().default(0),
+  loanShortfall: z.coerce.number().default(0), // Balance to be covered if bank appraises below TCP
+  logStatus: LogStatusEnum.default("NOT_STARTED"),
+  targetLogDate: z.coerce.date().optional().nullable(),
+  actualLogReleaseDate: z.coerce.date().optional().nullable(),
+  logDocumentUrl: z.string().optional().nullable(),
+  incomeDocsChecklist: z.array(BankIncomeDocSchema).default([]),
+  remarks: z.string().optional(),
+});
+export type BankLoanDetails = z.infer<typeof BankLoanDetailsSchema>;
+
+/**
+ * Multi-Tranche Developer Commission Voucher
+ */
+export const CommissionTrancheSchema = z.object({
+  id: z.string().uuid(),
+  trancheNumber: z.number().int().min(1).max(5),
+  name: z.string(), // e.g. "Tranche 1 (Reservation & 1st DP)"
+  milestoneCondition: z.string(), // e.g. "Cleared 1st monthly DP + Verified RAF"
+  percentage: z.number().min(0).max(100), // e.g. 20%
+  grossAmount: z.number().nonnegative(),
+  withholdingTaxAmount: z.number().nonnegative(), // 10% CWT
+  netAmount: z.number().nonnegative(),
+  status: z.enum(["PENDING", "ELIGIBLE", "INVOICED", "RELEASED", "DELAYED"]).default("PENDING"),
+  expectedClearanceDate: z.coerce.date().optional().nullable(),
+  actualReleaseDate: z.coerce.date().optional().nullable(),
+  bir2307Url: z.string().optional().nullable(),
+  orNumber: z.string().optional().nullable(),
+});
+export type CommissionTranche = z.infer<typeof CommissionTrancheSchema>;
+
+/**
+ * Co-Brokerage (50/50 External Broker) Transaction Details
+ */
+export const CoBrokerRoleEnum = z.enum([
+  "SELLING_BROKER",
+  "LISTING_BROKER",
+  "REFERRAL_BROKER",
+]);
+export type CoBrokerRole = z.infer<typeof CoBrokerRoleEnum>;
+
+export const CoBrokerageDetailsSchema = z.object({
+  isCoBrokered: z.boolean().default(false),
+  externalBrokerName: z.string().optional().default(""),
+  externalBrokerPrcLicense: z.string().optional().default(""),
+  externalBrokerDhsudReg: z.string().optional().default(""),
+  externalBrokerageAgency: z.string().optional().default(""),
+  externalBrokerPhone: z.string().optional().default(""),
+  externalBrokerEmail: z.string().optional().default(""),
+  coBrokeRole: CoBrokerRoleEnum.default("SELLING_BROKER"),
+  coBrokeSharePercent: z.number().min(0).max(100).default(50),
+  coBrokeGrossAmount: z.number().nonnegative().default(0),
+  moaSigned: z.boolean().default(false),
+  moaSignedDate: z.coerce.date().optional().nullable(),
+  moaDocumentUrl: z.string().optional().nullable(),
+  remarks: z.string().optional().default(""),
+});
+export type CoBrokerageDetails = z.infer<typeof CoBrokerageDetailsSchema>;
+
+/**
  * Full Deal & Reservation Closing Model Schema
  */
 export const DealSchema = z
@@ -128,6 +262,11 @@ export const DealSchema = z
     requirementsChecklist: z.array(DealRequirementItemSchema).default([]),
     paymentProofs: z.array(PaymentProofSchema).default([]),
     commissionSplits: z.array(CommissionSplitSchema).default([]),
+
+    // Advanced Enterprise Workflows
+    bankLoanDetails: BankLoanDetailsSchema.optional(),
+    commissionTranches: z.array(CommissionTrancheSchema).default([]),
+    coBrokerageDetails: CoBrokerageDetailsSchema.optional(),
 
     notes: z.string().max(4000).optional(),
     createdAt: z.coerce.date(),

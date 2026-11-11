@@ -411,9 +411,13 @@ function QuotationCalculatorContent() {
         console.warn("Could not render PDF blob for email attachment:", pdfErr);
       }
 
+      const idToken = user ? await user.getIdToken() : "";
       const response = await fetch("/api/quotations/send-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
         body: JSON.stringify({
           recipientEmail: selectedLead.email,
           recipientName: `${selectedLead.firstName} ${selectedLead.lastName}`,

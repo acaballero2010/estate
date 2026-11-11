@@ -48,6 +48,7 @@ import {
 } from "@/lib/schemas";
 import { downloadQuotationPdf } from "@/components/quotations/quotation-pdf-document";
 import { downloadReservationAgreementPdf } from "@/components/deals/reservation-agreement-pdf";
+import { AnimatedSuccessTick } from "@/components/ui/animated-success-tick";
 import { WhatsAppViberShareModal } from "@/components/quotations/whatsapp-viber-share-modal";
 import { PropertyShowcaseDialog } from "@/components/properties/property-showcase-dialog";
 import { uploadMediaFile } from "@/lib/firebase/storage-upload";
@@ -793,7 +794,7 @@ function BuyerQuotationPortalContent() {
             Indicative exchange rate for overseas buyers & OFWs
           </span>
         </div>
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar -mx-1 px-1 w-full sm:w-auto">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar -mx-2 px-2 pr-6 sm:pr-2 w-full sm:w-auto">
           {(Object.keys(CURRENCY_CONFIGS) as SupportedCurrency[]).map((curr) => {
             const conf = CURRENCY_CONFIGS[curr];
             const isSelected = selectedCurrency === curr;
@@ -822,7 +823,7 @@ function BuyerQuotationPortalContent() {
       {(createdDealNumber || matchingDeal) && (
         <div className="flex flex-col justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 sm:flex-row sm:items-center">
           <div className="flex items-center gap-2.5 text-xs">
-            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+            <AnimatedSuccessTick size={24} className="shrink-0" />
             <div>
               <p className="font-bold text-foreground">
                 Digital Reservation Confirmed — Deal Room {createdDealNumber || matchingDeal?.dealNumber} Active
@@ -1605,6 +1606,82 @@ function BuyerQuotationPortalContent() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {/* Visual Process Stepper (Law 05: Connectedness) */}
+            <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold transition-colors",
+                    referenceNo.trim()
+                      ? "bg-emerald-600 text-white"
+                      : "bg-primary text-primary-foreground"
+                  )}
+                >
+                  {referenceNo.trim() ? "✓" : "1"}
+                </span>
+                <span className="font-semibold text-foreground text-[11px]">
+                  Payment
+                </span>
+              </div>
+              <div
+                className={cn(
+                  "h-0.5 flex-1 mx-2 transition-colors",
+                  referenceNo.trim() ? "bg-emerald-500" : "bg-muted-foreground/30"
+                )}
+              />
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold transition-colors",
+                    receiptUrl
+                      ? "bg-emerald-600 text-white"
+                      : referenceNo.trim()
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {receiptUrl ? "✓" : "2"}
+                </span>
+                <span
+                  className={cn(
+                    "text-[11px]",
+                    receiptUrl ? "font-semibold text-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  Receipt
+                </span>
+              </div>
+              <div
+                className={cn(
+                  "h-0.5 flex-1 mx-2 transition-colors",
+                  receiptUrl ? "bg-emerald-500" : "bg-muted-foreground/30"
+                )}
+              />
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold transition-colors",
+                    hasSignedCanvas
+                      ? "bg-emerald-600 text-white"
+                      : receiptUrl
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {hasSignedCanvas ? "✓" : "3"}
+                </span>
+                <span
+                  className={cn(
+                    "text-[11px]",
+                    hasSignedCanvas
+                      ? "font-semibold text-foreground"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  E-Sign
+                </span>
+              </div>
+            </div>
             <div className="rounded-lg border bg-primary/5 p-3 text-xs flex items-center justify-between">
               <div>
                 <span className="text-muted-foreground block">

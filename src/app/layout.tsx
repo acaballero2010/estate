@@ -32,10 +32,52 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL || "https://propflow.ph";
+
 export const metadata: Metadata = {
-  title: "PropFlow CRM | Real Estate Sales Enablement & Pipeline Platform",
+  metadataBase: new URL(APP_URL),
+  title: {
+    default: "PropFlow CRM | Real Estate Sales Enablement & Pipeline Platform",
+    template: "%s | PropFlow",
+  },
   description:
-    "Mobile-first CRM, Meta Messenger automation, real estate amortization quotation calculator, and deal closing platform for brokers and agents.",
+    "Mobile-first real estate CRM, Meta Messenger automation, amortization quotation calculator, and deal closing platform for licensed brokers and agents in the Philippines.",
+  keywords: [
+    "PropFlow",
+    "real estate CRM Philippines",
+    "PRC licensed broker platform",
+    "real estate amortization calculator",
+    "Meta Messenger lead capture",
+    "Philippine condominium sales",
+  ],
+  authors: [{ name: "PropFlow Realty Group" }],
+  openGraph: {
+    title: "PropFlow CRM | Real Estate Sales Enablement Platform",
+    description:
+      "Modern CRM, automated quotation generators, and Meta Messenger lead pipeline for licensed brokers and agents.",
+    url: APP_URL,
+    siteName: "PropFlow CRM",
+    locale: "en_PH",
+    type: "website",
+    images: [
+      {
+        url: "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+        width: 1200,
+        height: 630,
+        alt: "PropFlow Real Estate CRM Platform",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PropFlow CRM | Real Estate Sales Enablement Platform",
+    description:
+      "Modern CRM, automated quotation generators, and Meta Messenger lead pipeline for licensed brokers and agents.",
+    images: [
+      "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1200&q=80",
+    ],
+  },
 };
 
 export const viewport: Viewport = {

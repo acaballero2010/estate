@@ -99,14 +99,23 @@ const DEFAULT_FALLBACK_AGENT: AgentProfile = {
   agencyName: "PropFlow Realty Group",
 };
 
-function setSessionCookie(hasSession: boolean) {
+function setSessionCookie(hasSession: boolean, isAdmin?: boolean) {
   if (typeof document !== "undefined") {
     if (hasSession) {
       document.cookie =
         "propflow_auth_session=1; path=/; max-age=2592000; SameSite=Lax";
+      if (isAdmin) {
+        document.cookie =
+          "propflow_is_admin=1; path=/; max-age=2592000; SameSite=Lax";
+      } else {
+        document.cookie =
+          "propflow_is_admin=; path=/; max-age=0; SameSite=Lax";
+      }
     } else {
       document.cookie =
         "propflow_auth_session=; path=/; max-age=0; SameSite=Lax";
+      document.cookie =
+        "propflow_is_admin=; path=/; max-age=0; SameSite=Lax";
     }
   }
 }
@@ -167,7 +176,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const cached = localStorage.getItem("propflow_agent_profile");
       if (cached) {
-        setAgentProfile(JSON.parse(cached));
+        const parsed = JSON.parse(cached) as AgentProfile;
+        setAgentProfile(parsed);
+        const isAdmin = Boolean(parsed.role === "ADMIN" || parsed.isPlatformAdmin);
+        setSessionCookie(true, isAdmin);
       }
     } catch {
       // Non-blocking
@@ -177,10 +189,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       firebaseAuth,
       async (currentUser) => {
         setUser(currentUser);
-        setSessionCookie(Boolean(currentUser));
         if (currentUser) {
           const profile = await fetchOrCreateAgentProfile(currentUser);
           setAgentProfile(profile);
+          const isAdmin = Boolean(profile.role === "ADMIN" || profile.isPlatformAdmin);
+          setSessionCookie(true, isAdmin);
           try {
             localStorage.setItem(
               "propflow_agent_profile",
@@ -192,6 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await useCrmStore.getState().syncWithAgentAccount(currentUser.uid);
         } else {
           setAgentProfile(null);
+          setSessionCookie(false, false);
           try {
             localStorage.removeItem("propflow_agent_profile");
           } catch {
@@ -212,8 +226,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       password
     );
-    setSessionCookie(true);
     const profile = await fetchOrCreateAgentProfile(credential.user);
+    const isAdmin = Boolean(profile.role === "ADMIN" || profile.isPlatformAdmin);
+    setSessionCookie(true, isAdmin);
     setAgentProfile(profile);
     try {
       localStorage.setItem("propflow_agent_profile", JSON.stringify(profile));
@@ -228,7 +243,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       payload.email,
       payload.password
     );
-    setSessionCookie(true);
 
     await updateFirebaseProfile(credential.user, {
       displayName: payload.fullName,
@@ -243,6 +257,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       phone: payload.phone,
       agencyName: payload.agencyName || "PropFlow Realty Group",
     };
+
+    const isAdmin = Boolean(newProfile.role === "ADMIN" || newProfile.isPlatformAdmin);
+    setSessionCookie(true, isAdmin);
 
     try {
       await setDoc(doc(firestoreDb, "agents", credential.user.uid), {
@@ -266,8 +283,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = async () => {
     const credential = await signInWithPopup(firebaseAuth, googleAuthProvider);
-    setSessionCookie(true);
     const profile = await fetchOrCreateAgentProfile(credential.user);
+    const isAdmin = Boolean(profile.role === "ADMIN" || profile.isPlatformAdmin);
+    setSessionCookie(true, isAdmin);
     setAgentProfile(profile);
     try {
       localStorage.setItem("propflow_agent_profile", JSON.stringify(profile));
@@ -277,7 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    setSessionCookie(false);
+    setSessionCookie(false, false);
     await firebaseSignOut(firebaseAuth);
     setUser(null);
     setAgentProfile(null);
@@ -295,6 +313,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ...updates,
     };
     setAgentProfile(updated);
+    const isAdm = Boolean(updated.role === "ADMIN" || updated.isPlatformAdmin);
+    setSessionCookie(true, isAdm);
     try {
       localStorage.setItem("propflow_agent_profile", JSON.stringify(updated));
     } catch {

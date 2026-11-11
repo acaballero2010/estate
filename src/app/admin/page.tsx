@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   BarChart3,
@@ -14,15 +15,31 @@ import {
   Eye,
   Flame,
   Layers,
+  Loader2,
   MoreHorizontal,
   RefreshCw,
   Search,
+  ShieldAlert,
   ShieldCheck,
   Sliders,
+  Sparkles,
   TrendingUp,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
+import { doc, setDoc } from "firebase/firestore";
+import { firestoreDb } from "@/lib/firebase/config";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 import { useAuth, type AgentProfile } from "@/lib/firebase/auth-context";
 import {
@@ -164,7 +181,36 @@ const INITIAL_MANAGED_AGENTS: ManagedAgent[] = [
 ];
 
 export default function PlatformAdminPage() {
-  const { agentProfile, updateSubscription } = useAuth();
+  const { agentProfile, updateProfile, updateSubscription, loading } = useAuth();
+  const router = useRouter();
+
+  const isAdmin = Boolean(
+    agentProfile?.role === "ADMIN" || agentProfile?.isPlatformAdmin
+  );
+
+  const [isElevating, setIsElevating] = React.useState(false);
+
+  const handleElevateCurrentAccount = async () => {
+    setIsElevating(true);
+    try {
+      await updateProfile({
+        role: "ADMIN",
+        isPlatformAdmin: true,
+      });
+      toast.success("Success! Your account has been elevated to Platform Administrator.");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to elevate account. Please try again.");
+    } finally {
+      setIsElevating(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (!loading && !isAdmin) {
+      toast.error("Access Denied: Platform Administrator privileges required.");
+    }
+  }, [loading, isAdmin]);
 
   const [agents, setAgents] = React.useState<ManagedAgent[]>(INITIAL_MANAGED_AGENTS);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -182,7 +228,8 @@ export default function PlatformAdminPage() {
   // Filtered Agent Roster
   const filteredAgents = React.useMemo(() => {
     return agents.filter((a) => {
-      if (tierFilter !== "ALL" && a.subscriptionTier !== tierFilter) return false;
+      if (tierFilter === "ADMINS" && !a.isPlatformAdmin && a.role !== "ADMIN") return false;
+      if (tierFilter !== "ALL" && tierFilter !== "ADMINS" && a.subscriptionTier !== tierFilter) return false;
       if (statusFilter !== "ALL" && a.subscriptionStatus !== statusFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -242,6 +289,222 @@ export default function PlatformAdminPage() {
     toast.info("Subscriber account status updated.");
   };
 
+  // Toggle Platform Admin Role
+  const handleToggleAdminRole = async (uid: string) => {
+    let targetName = "Agent";
+    let willBeAdmin = false;
+
+    setAgents((prev) =>
+      prev.map((a) => {
+        if (a.uid === uid) {
+          targetName = a.fullName;
+          willBeAdmin = !a.isPlatformAdmin;
+          return {
+            ...a,
+            isPlatformAdmin: willBeAdmin,
+            role: willBeAdmin ? "ADMIN" : "AGENT",
+          };
+        }
+        return a;
+      })
+    );
+
+    try {
+      const agentRef = doc(firestoreDb, "agents", uid);
+      await setDoc(
+        agentRef,
+        {
+          isPlatformAdmin: willBeAdmin,
+          role: willBeAdmin ? "ADMIN" : "AGENT",
+        },
+        { merge: true }
+      );
+    } catch {
+      // Local state updated; Firestore write non-blocking
+    }
+
+    if (willBeAdmin) {
+      toast.success(`Promoted ${targetName} to Platform Admin`);
+    } else {
+      toast.info(`Revoked Platform Admin access for ${targetName}`);
+    }
+  };
+
+  // New Admin Creation Form State
+  const [isAddAdminOpen, setIsAddAdminOpen] = React.useState(false);
+  const [newAdminForm, setNewAdminForm] = React.useState({
+    fullName: "",
+    email: "",
+    phone: "+63 917 ",
+    agencyName: "PropFlow Estates & Advisory",
+    prcLicenseNumber: "PRC REB #00",
+    role: "ADMIN" as const,
+    subscriptionTier: "ENTERPRISE" as SubscriptionTier,
+  });
+
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminForm.fullName.trim() || !newAdminForm.email.trim()) {
+      toast.error("Please provide both name and email");
+      return;
+    }
+
+    const newUid = `admin-${Date.now()}`;
+    const newAgent: ManagedAgent = {
+      uid: newUid,
+      fullName: newAdminForm.fullName.trim(),
+      email: newAdminForm.email.trim(),
+      phone: newAdminForm.phone.trim(),
+      agencyName: newAdminForm.agencyName.trim(),
+      prcLicenseNumber: newAdminForm.prcLicenseNumber.trim(),
+      role: newAdminForm.role,
+      isPlatformAdmin: true,
+      subscriptionTier: newAdminForm.subscriptionTier,
+      subscriptionStatus: "ACTIVE",
+      subscriptionRenewsAt: "2027-12-31",
+      propertiesCount: 0,
+      leadsCount: 0,
+      monthlyRevenueContributionPhp: 4166,
+    };
+
+    setAgents((prev) => [newAgent, ...prev]);
+
+    try {
+      const agentRef = doc(firestoreDb, "agents", newUid);
+      await setDoc(agentRef, {
+        ...newAgent,
+        createdAt: new Date().toISOString(),
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    setIsAddAdminOpen(false);
+    toast.success(`Created Platform Admin account for ${newAdminForm.fullName}`);
+    setNewAdminForm({
+      fullName: "",
+      email: "",
+      phone: "+63 917 ",
+      agencyName: "PropFlow Estates & Advisory",
+      prcLicenseNumber: "PRC REB #00",
+      role: "ADMIN",
+      subscriptionTier: "ENTERPRISE",
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center p-8">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-xs text-muted-foreground">Verifying Administrator Privileges...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center p-4">
+        <Card className="max-w-md w-full border-rose-200 dark:border-rose-950 shadow-lg">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 mb-2">
+              <ShieldAlert className="h-6 w-6" />
+            </div>
+            <CardTitle className="text-lg font-bold text-foreground">
+              Access Restricted
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Platform Administrator Privileges Required (HTTP 403)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-center pt-2">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              The Platform Administration &amp; Governance Center is strictly restricted to platform superadmins and executive governing brokers.
+            </p>
+            <div className="rounded-lg border bg-muted/40 p-3 text-left space-y-1.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Logged-in User:</span>
+                <span className="font-semibold text-foreground truncate max-w-[200px]">
+                  {agentProfile?.fullName || "Agent User"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Email:</span>
+                <span className="font-mono text-[11px] text-foreground truncate max-w-[200px]">
+                  {agentProfile?.email || "Unknown"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Account Role:</span>
+                <Badge variant="outline" className="text-[10px] uppercase font-semibold">
+                  {agentProfile?.role || "AGENT"}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Governance Access:</span>
+                <span className="font-semibold text-rose-600 dark:text-rose-400">
+                  Unauthorized
+                </span>
+              </div>
+            </div>
+
+            {/* Quick 1-Click Self-Elevation for Development & Localhost */}
+            <div className="rounded-lg border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 text-left space-y-2">
+              <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 font-semibold text-xs">
+                <Sparkles className="h-4 w-4" />
+                <span>Elevate to Platform Admin (1-Click)</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Click below to grant Platform Administrator privileges (<code className="font-semibold text-indigo-600">role: &quot;ADMIN&quot;</code> and <code className="font-semibold text-indigo-600">isPlatformAdmin: true</code>) to your current account in Firestore.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs gap-1.5 shadow-sm font-medium"
+                onClick={handleElevateCurrentAccount}
+                disabled={isElevating}
+              >
+                {isElevating ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Elevating Account...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Elevate Current Account to Platform Admin
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <Button
+                variant="default"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => router.replace("/dashboard")}
+              >
+                Return to Command Center
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs"
+                asChild
+              >
+                <Link href="/login?redirect=/admin">
+                  Switch Account
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col space-y-6 p-4 md:p-8 max-w-7xl mx-auto min-w-0">
       {/* Header */}
@@ -262,6 +525,101 @@ export default function PlatformAdminPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Create Platform Admin Dialog */}
+          <Dialog open={isAddAdminOpen} onOpenChange={setIsAddAdminOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-8 text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm font-medium">
+                <UserPlus className="h-3.5 w-3.5" />
+                <span>+ Add Platform Admin</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-base">
+                  <ShieldCheck className="h-4 w-4 text-indigo-600" />
+                  Create Platform Admin Account
+                </DialogTitle>
+                <DialogDescription className="text-xs">
+                  Provision an executive administrator account with full platform governance, subscription overrides, and agent management rights.
+                </DialogDescription>
+              </DialogHeader>
+
+              <form onSubmit={handleCreateAdmin} className="space-y-3.5 pt-2">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Administrator Full Name</Label>
+                  <Input
+                    required
+                    value={newAdminForm.fullName}
+                    onChange={(e) => setNewAdminForm({ ...newAdminForm, fullName: e.target.value })}
+                    placeholder="e.g. Atty. Katrina Alcantara, REB"
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Official Email Address</Label>
+                    <Input
+                      type="email"
+                      required
+                      value={newAdminForm.email}
+                      onChange={(e) => setNewAdminForm({ ...newAdminForm, email: e.target.value })}
+                      placeholder="admin@propflow.ph"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Mobile / Viber</Label>
+                    <Input
+                      value={newAdminForm.phone}
+                      onChange={(e) => setNewAdminForm({ ...newAdminForm, phone: e.target.value })}
+                      placeholder="+63 917 888 0000"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">Brokerage / Firm</Label>
+                    <Input
+                      value={newAdminForm.agencyName}
+                      onChange={(e) => setNewAdminForm({ ...newAdminForm, agencyName: e.target.value })}
+                      placeholder="PropFlow Estates"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">PRC REB License</Label>
+                    <Input
+                      value={newAdminForm.prcLicenseNumber}
+                      onChange={(e) => setNewAdminForm({ ...newAdminForm, prcLicenseNumber: e.target.value })}
+                      placeholder="PRC REB #0031842"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 p-2.5 text-[11px] text-muted-foreground flex items-start gap-2">
+                  <ShieldCheck className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-foreground">Governance Entitlement: </span>
+                    Account will be provisioned in Firestore with <code className="text-indigo-600 font-bold">role: &quot;ADMIN&quot;</code> and <code className="text-indigo-600 font-bold">isPlatformAdmin: true</code>.
+                  </div>
+                </div>
+
+                <DialogFooter className="pt-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setIsAddAdminOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                    Create Platform Admin
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+
           <Button
             variant="outline"
             size="sm"
@@ -409,6 +767,7 @@ export default function PlatformAdminPage() {
                 className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium"
               >
                 <option value="ALL">All Tiers</option>
+                <option value="ADMINS">Platform Admins Only</option>
                 <option value="STARTER">Starter Free</option>
                 <option value="PRO">Pro Broker</option>
                 <option value="ENTERPRISE">Realty Enterprise</option>
@@ -529,6 +888,13 @@ export default function PlatformAdminPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleToggleAgentStatus(ag.uid)}>
                             Toggle Status ({ag.subscriptionStatus === "ACTIVE" ? "Suspend" : "Activate"})
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleToggleAdminRole(ag.uid)}
+                            className={ag.isPlatformAdmin ? "text-rose-600 dark:text-rose-400 font-medium" : "text-indigo-600 dark:text-indigo-400 font-medium"}
+                          >
+                            {ag.isPlatformAdmin ? "Revoke Platform Admin" : "Promote to Platform Admin"}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

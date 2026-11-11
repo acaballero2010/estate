@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { adminAuth } from "@/lib/firebase/admin";
 
 const VerifyTokenSchema = z.object({
   pageId: z.string().min(1, "Page ID is required"),
@@ -8,6 +9,27 @@ const VerifyTokenSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Verify agent authentication: Require verified Firebase ID Token or active session
+    const authHeader = request.headers.get("authorization");
+    const authSessionCookie = request.cookies.get("propflow_auth_session");
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const idToken = authHeader.slice(7).trim();
+      try {
+        await adminAuth.verifyIdToken(idToken);
+      } catch (authErr) {
+        console.warn("Invalid ID token in verify-token request:", authErr);
+        return NextResponse.json(
+          { valid: false, error: "Unauthorized. Invalid or expired authentication token." },
+          { status: 401 }
+        );
+      }
+    } else if (!authSessionCookie?.value) {
+      return NextResponse.json(
+        { valid: false, error: "Unauthorized. An active agent session is required to verify tokens." },
+        { status: 401 }
+      );
+    }
     const body: unknown = await request.json();
     const parsed = VerifyTokenSchema.safeParse(body);
 

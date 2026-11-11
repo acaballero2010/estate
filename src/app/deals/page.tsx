@@ -3,6 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import {
+  Archive,
   CheckCircle2,
   Clock,
   Download,
@@ -11,10 +12,13 @@ import {
   Receipt,
   Users,
 } from "lucide-react";
-import { computeDealCommissionMetrics } from "@/lib/schemas";
+import { computeDealCommissionMetrics, type Deal } from "@/lib/schemas";
 import { downloadCommissionVoucherPdf } from "@/components/deals/commission-voucher-pdf";
 import { downloadReservationAgreementPdf } from "@/components/deals/reservation-agreement-pdf";
 import { downloadBir2307Pdf } from "@/components/deals/bir-2307-pdf";
+import { BankMortgageTrackerCard } from "@/components/deals/bank-mortgage-tracker-card";
+import { CommissionTranchesCard } from "@/components/deals/commission-tranches-card";
+import { CoBrokerageCard } from "@/components/deals/co-brokerage-card";
 import { useCrmStore } from "@/lib/store/crm-store";
 import { formatCompactCurrency, formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -36,8 +40,98 @@ import {
 } from "@/components/ui/table";
 
 export default function DealsPage() {
-  const { deals, leads, properties, toggleDealRequirementStatus } =
-    useCrmStore();
+  const {
+    deals,
+    leads,
+    properties,
+    toggleDealRequirementStatus,
+    disburseDealCommission,
+  } = useCrmStore();
+
+  const [isPackagingDealId, setIsPackagingDealId] = React.useState<string | null>(
+    null
+  );
+
+  const readyForDisbursementDeals = React.useMemo(() => {
+    return deals.filter(
+      (d) =>
+        d.stage !== "CLOSED_RELEASED" &&
+        d.requirementsChecklist.length > 0 &&
+        d.requirementsChecklist.every((r) => r.status === "VERIFIED")
+    );
+  }, [deals]);
+
+  const handleDownloadFullClosingPacket = async (deal: Deal) => {
+    setIsPackagingDealId(deal.id);
+    const buyer = leads.find((l) => l.id === deal.leadId);
+    const property = properties.find((p) => p.id === deal.propertyId);
+
+    const buyerName = buyer
+      ? `${buyer.firstName} ${buyer.lastName}`
+      : "Assigned Buyer";
+    const projectName = property?.projectName || "Accredited Development";
+    const developerName = property?.developerName || "Ayala Premier Estates";
+    const unitCode = property?.unitCode || "Reserved Unit";
+
+    try {
+      toast.info(`Generating complete Closing Packet for ${deal.dealNumber}...`);
+
+      // 1. Download Signed Reservation Agreement
+      await downloadReservationAgreementPdf({
+        deal,
+        buyerName,
+        buyerEmail: buyer?.email,
+        buyerPhone: buyer?.phone,
+        projectName,
+        developerName,
+        unitCode,
+        floorAreaSqm: property?.floorAreaSqm || 84.5,
+        parkingSlots: property?.parkingSlots || 1,
+        turnoverDate: property?.turnoverDate || "Q4 2027",
+      });
+
+      // 2. Download Commission Release Voucher
+      await downloadCommissionVoucherPdf({
+        deal,
+        buyerName,
+        projectName,
+        unitCode,
+      });
+
+      // 3. Download Primary Selling Agent BIR 2307
+      const primarySplit =
+        deal.commissionSplits.find((s) => s.role === "SELLING_AGENT") ||
+        deal.commissionSplits[0];
+
+      if (primarySplit) {
+        await downloadBir2307Pdf({
+          deal,
+          split: primarySplit,
+          payorName: property?.developerName
+            ? `${property.developerName} / PropFlow Realty`
+            : "PropFlow Realty & Development Corp.",
+          payeeTin: "482-192-831-000",
+          payeeAddress: buyer?.notes || "Metro Manila, Philippines",
+        });
+      }
+
+      toast.success(
+        `Downloaded complete Closing Packet (RAF + Voucher + BIR 2307) for ${deal.dealNumber}!`
+      );
+    } catch (err) {
+      console.warn("Closing packet download error:", err);
+      toast.error("Failed to generate complete closing packet.");
+    } finally {
+      setIsPackagingDealId(null);
+    }
+  };
+
+  const handleDisburseCommission = (deal: Deal) => {
+    disburseDealCommission(deal.id);
+    toast.success(
+      `Commission disbursed & logged for ${deal.dealNumber}! BIR 2307 certificates stamped.`
+    );
+  };
 
   // Compute portfolio-wide commission summary
   const summary = React.useMemo(() => {
@@ -139,6 +233,42 @@ export default function DealsPage() {
         </Card>
       </div>
 
+      {/* Automated Commission & Takeout Milestone Task Card */}
+      {readyForDisbursementDeals.length > 0 && (
+        <div className="rounded-lg border border-border/80 border-l-4 border-l-emerald-500 bg-card p-3.5 sm:p-4 text-xs shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="rounded-md bg-emerald-500/10 p-2 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <CheckCircle2 className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-foreground text-sm">
+                    Automated Commission Milestone: {readyForDisbursementDeals.length} Deal{readyForDisbursementDeals.length > 1 ? "s" : ""} Ready for Disbursement
+                  </h3>
+                  <Badge variant="won" className="text-[10px] py-0 font-medium">
+                    100% Requirements Verified
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  All buyer KYC and loan takeout requirements are verified. Commission splits and BIR Form 2307 certificates can now be disbursed.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-medium"
+                onClick={() => handleDisburseCommission(readyForDisbursementDeals[0]!)}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Disburse Commission ({readyForDisbursementDeals[0]?.dealNumber})
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Deal Room Cards */}
       <div className="space-y-5">
         {deals.map((deal) => {
@@ -196,6 +326,36 @@ export default function DealsPage() {
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        disabled={isPackagingDealId === deal.id}
+                        className="h-7 text-[11px] gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-none"
+                        onClick={() => handleDownloadFullClosingPacket(deal)}
+                        title="Download Reservation Agreement, Commission Voucher, and BIR 2307 in one package"
+                      >
+                        <Archive className="h-3 w-3" />
+                        {isPackagingDealId === deal.id
+                          ? "Generating Packet..."
+                          : "Complete Closing Packet"}
+                      </Button>
+
+                      {deal.requirementsChecklist.length > 0 &&
+                        deal.requirementsChecklist.every(
+                          (r) => r.status === "VERIFIED"
+                        ) &&
+                        deal.stage !== "CLOSED_RELEASED" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] gap-1.5 border-emerald-500/40 text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20 dark:text-emerald-300 font-semibold"
+                            onClick={() => handleDisburseCommission(deal)}
+                            title="Release all commission splits and stamp BIR Form 2307"
+                          >
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            Disburse Commission
+                          </Button>
+                        )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -460,6 +620,21 @@ export default function DealsPage() {
                       </TableBody>
                     </Table>
                   </div>
+                </div>
+
+                {/* 3. Bank Mortgage & LOG Tracker (P0: Prevents financing failure) */}
+                <div className="lg:col-span-12 pt-1">
+                  <BankMortgageTrackerCard deal={deal} />
+                </div>
+
+                {/* 4. Multi-Tranche Developer Commission Schedule (P1: 12-24 mo payout schedule) */}
+                <div className="lg:col-span-12 pt-1">
+                  <CommissionTranchesCard deal={deal} />
+                </div>
+
+                {/* 5. Co-Brokerage Networking & 50/50 External Splits (P2: RESA Law RA 9646) */}
+                <div className="lg:col-span-12 pt-1">
+                  <CoBrokerageCard deal={deal} lead={buyer} property={property} />
                 </div>
               </CardContent>
             </Card>

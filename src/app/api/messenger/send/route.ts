@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { adminAuth, adminFirestore } from "@/lib/firebase/admin";
 
 const SendMessageSchema = z.object({
   recipientPsid: z.string().min(1, "Recipient PSID is required"),
@@ -9,6 +10,20 @@ const SendMessageSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. Authenticate caller if Firebase ID token is provided
+    const authHeader = request.headers.get("authorization");
+    let verifiedAgentUid: string | null = null;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const idToken = authHeader.slice(7).trim();
+      try {
+        const decoded = await adminAuth.verifyIdToken(idToken);
+        verifiedAgentUid = decoded.uid;
+      } catch (authErr) {
+        console.warn("Invalid ID token in messenger/send:", authErr);
+      }
+    }
+
     const body: unknown = await request.json();
     const parsed = SendMessageSchema.safeParse(body);
 
@@ -23,14 +38,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { recipientPsid, text, pageAccessToken } = parsed.data;
+    const { recipientPsid, text } = parsed.data;
+    let activeToken = parsed.data.pageAccessToken?.trim() || "";
 
-    // If no token or simulated/demo token, return simulated success
+    // 2. Shield token: If agent is authenticated, retrieve the pageAccessToken securely from Firestore
+    if (verifiedAgentUid) {
+      try {
+        const settingsSnap = await adminFirestore
+          .collection("agents")
+          .doc(verifiedAgentUid)
+          .collection("settings")
+          .doc("messenger")
+          .get();
+
+        if (settingsSnap.exists) {
+          const settings = settingsSnap.data() as {
+            pageAccessToken?: string;
+            isConnected?: boolean;
+          };
+          if (settings.pageAccessToken) {
+            activeToken = settings.pageAccessToken.trim();
+          }
+        }
+      } catch (dbErr) {
+        console.warn("Could not load server-side messenger token:", dbErr);
+      }
+    }
+
+    // 3. Simulated/Demo fallback for testing and development
     if (
-      !pageAccessToken ||
-      pageAccessToken.startsWith("demo_") ||
-      pageAccessToken.startsWith("EAAdemo") ||
-      pageAccessToken === "test" ||
+      !activeToken ||
+      activeToken.startsWith("demo_") ||
+      activeToken.startsWith("EAAdemo") ||
+      activeToken === "test" ||
       recipientPsid.startsWith("psid_sim_")
     ) {
       return NextResponse.json({
@@ -41,10 +81,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Call Meta Graph API Send API
+    // 4. Call Meta Graph API Send API
     const metaResponse = await fetch(
       `https://graph.facebook.com/v21.0/me/messages?access_token=${encodeURIComponent(
-        pageAccessToken.trim()
+        activeToken
       )}`,
       {
         method: "POST",
@@ -94,4 +134,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
